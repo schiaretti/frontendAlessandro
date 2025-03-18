@@ -7,11 +7,17 @@ const BotaoCamera = ({ label, onFotoCapturada }) => {
   const [cameraAberta, setCameraAberta] = useState(false); // Estado para controlar se a câmera está aberta
   const [salvo, setSalvo] = useState(false); // Estado para controlar se a foto foi salva
 
-  // Função para abrir a câmera
+  // Função para abrir a câmera traseira
   const abrirCamera = async () => {
     try {
-      // Solicita acesso à câmera
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Solicita acesso à câmera traseira
+      const constraints = {
+        video: {
+          facingMode: "environment", // Prioriza a câmera traseira
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       // Verifica se o componente ainda está montado antes de atribuir o stream
       if (videoRef.current) {

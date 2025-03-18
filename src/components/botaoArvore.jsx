@@ -9,11 +9,17 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
   const [botaoDesabilitado, setBotaoDesabilitado] = useState(false); // Estado para desabilitar o botão "Tirar Foto"
   const [fotosSalvas, setFotosSalvas] = useState([]); // Estado para armazenar as fotos salvas
 
-  // Função para abrir a câmera
+  // Função para abrir a câmera traseira
   const abrirCamera = async () => {
     try {
-      // Solicita acesso à câmera
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Solicita acesso à câmera traseira
+      const constraints = {
+        video: {
+          facingMode: "environment", // Prioriza a câmera traseira
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       // Verifica se o componente ainda está montado antes de atribuir o stream
       if (videoRef.current) {
@@ -185,7 +191,7 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
       {fotosSalvas.length > 0 && (
         <div className="mt-6">
           <h3 className="text-lg font-bold mb-4">Fotos Salvas</h3>
-          <div className="flex flex-wrap gap-10">
+          <div className="flex flex-wrap gap-4">
             {fotosSalvas.map((foto) => (
               <div key={foto.id} className="flex flex-col items-center">
                 <img

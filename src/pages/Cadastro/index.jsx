@@ -15,14 +15,15 @@ function Cadastro() {
     const [enderecoInput, setEnderecoInput] = useState("");
     const [numero, setNumero] = useState("");
     const [cep, setCep] = useState("");
+    const [isNumeroManual, setIsNumeroManual] = useState(false); // Estado para controlar se o número foi digitado manualmente
 
     // Estados para os ComboBox
-    const [localizacao, setLocalizacao] = useState(""); // Estado para o ComboBox "Selecione"
-    const [transformador, setTransformador] = useState(""); // Estado para o ComboBox "Poste com Transformador"
-    const [medicao, setMedicao] = useState(""); // Estado para o ComboBox "Poste com Medição"
-    const [telecom, setTelecom] = useState(""); // Estado para o ComboBox "Poste com Telecom"
-    const [concentrador, setConcentrador] = useState(""); // Estado para o ComboBox "Poste com Concentrador"
-    const [poste, setPoste] = useState(""); // Estado para o ComboBox "Poste com Concentrador"
+    const [localizacao, setLocalizacao] = useState("");
+    const [transformador, setTransformador] = useState("");
+    const [medicao, setMedicao] = useState("");
+    const [telecom, setTelecom] = useState("");
+    const [concentrador, setConcentrador] = useState("");
+    const [poste, setPoste] = useState("");
     const [alturaposte, setalturaPoste] = useState("");
     const [estruturaposte, setestruturaPoste] = useState("");
     const [tipoBraco, settipoBraco] = useState("");
@@ -49,23 +50,23 @@ function Cadastro() {
         if (endereco) {
             setCidade(endereco.cidade);
             setEnderecoInput(endereco.rua);
-            setNumero(endereco.numero);
             setCep(endereco.cep);
+            // Só preenche o número automaticamente se não foi digitado manualmente
+            if (!isNumeroManual) {
+                setNumero(endereco.numero || "");
+            }
         }
-    }, [endereco]);
+    }, [endereco, isNumeroManual]);
 
     // Função para lidar com a foto panorâmica
     const handleFotoLuminaria = (fotoURL) => {
         console.log("Foto da Panorâmica capturada:", fotoURL);
-        // Adicione aqui a lógica para processar a foto panorâmica
     };
 
     // Função para lidar com a foto da árvore
     const handleFotoArvore = (foto) => {
         console.log("Foto da Árvore capturada:", foto);
-        // Aqui você pode processar os dados da foto (URL, localização, ID)
     };
-
 
     // Funções para lidar com a seleção dos ComboBox
     const handleLocalizacaoChange = (value) => {
@@ -172,11 +173,8 @@ function Cadastro() {
         setespecieArvore(value);
     };
 
-
-
     // Função para salvar o cadastro
     const handleSalvarCadastro = () => {
-        // Cria um objeto com todos os dados do formulário
         const formData = {
             coords,
             cidade,
@@ -345,7 +343,10 @@ function Cadastro() {
                         <input
                             type="text"
                             value={numero}
-                            onChange={(e) => setNumero(e.target.value)}
+                            onChange={(e) => {
+                                setNumero(e.target.value);
+                                setIsNumeroManual(true); // Marca que o número foi digitado manualmente
+                            }}
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>

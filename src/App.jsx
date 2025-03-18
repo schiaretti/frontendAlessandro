@@ -9,8 +9,8 @@ function App() {
     <BrowserRouter>
     <ErrorBoundary>
       <Routes>
-        <Route path="/" element={<Cadastro/>} />
-        <Route path='/Login' element={<Login/>} />
+        <Route path="/cadastro" element={<Cadastro/>} />
+        <Route path='/' element={<Login/>} />
       </Routes>
       </ErrorBoundary>
     </BrowserRouter>

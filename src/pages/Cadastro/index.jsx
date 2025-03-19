@@ -4,18 +4,22 @@ import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";
 import BotaoArvore from "../../components/botaoArvore.jsx";
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 function Cadastro() {
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
     const { coords, endereco } = useGetLocation(isLastPost || isFirstPostRegistered);
+    const [mostrarMapa, setMostrarMapa] = useState(false);
+    const [userCoords, setUserCoords] = useState(null); // Estado para armazenar as coordenadas do usuário
 
     // Estados para os campos de entrada
     const [cidade, setCidade] = useState("");
     const [enderecoInput, setEnderecoInput] = useState("");
     const [numero, setNumero] = useState("");
     const [cep, setCep] = useState("");
-    const [isNumeroManual, setIsNumeroManual] = useState(false); // Estado para controlar se o número foi digitado manualmente
+    const [isNumeroManual, setIsNumeroManual] = useState(false);
 
     // Estados para os ComboBox
     const [localizacao, setLocalizacao] = useState("");
@@ -51,12 +55,53 @@ function Cadastro() {
             setCidade(endereco.cidade);
             setEnderecoInput(endereco.rua);
             setCep(endereco.cep);
-            // Só preenche o número automaticamente se não foi digitado manualmente
             if (!isNumeroManual) {
                 setNumero(endereco.numero || "");
             }
         }
     }, [endereco, isNumeroManual]);
+
+    // Função para obter a localização do usuário
+    const obterLocalizacaoUsuario = () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    setUserCoords([latitude, longitude]); // Armazena as coordenadas no estado
+                    setMostrarMapa(true); // Mostra o mapa
+                },
+                (error) => {
+                    console.error("Erro ao obter localização:", error);
+                    alert("Não foi possível obter sua localização. Verifique as permissões do navegador.");
+                }
+            );
+        } else {
+            alert("Geolocalização não é suportada pelo seu navegador.");
+        }
+    };
+
+    // Inicializa o mapa com as coordenadas do usuário
+    useEffect(() => {
+        if (mostrarMapa && userCoords) {
+            if (!document.getElementById('mapa')._leaflet_map) {
+                const mapa = L.map('mapa').setView(userCoords, 13); // Usa as coordenadas do usuário
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(mapa);
+
+                L.marker(userCoords).addTo(mapa) // Adiciona um marcador na localização do usuário
+                    .bindPopup('Você está aqui!')
+                    .openPopup();
+            }
+        }
+    }, [mostrarMapa, userCoords]);
+
+    // Função para fechar o mapa
+    const fecharMapa = () => {
+        setMostrarMapa(false); // Oculta o mapa
+        setUserCoords(null); // Limpa as coordenadas
+    };
 
     // Função para lidar com a foto panorâmica
     const handleFotoLuminaria = (fotoURL) => {
@@ -212,25 +257,6 @@ function Cadastro() {
 
         console.log("Dados do formulário:", formData);
 
-        // Aqui você pode enviar os dados para o backend
-        // Exemplo usando fetch:
-        /*
-        fetch("https://seuservidor.com/api/cadastro", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(formData),
-        })
-            .then((response) => response.json())
-            .then((data) => {
-                console.log("Resposta do servidor:", data);
-            })
-            .catch((error) => {
-                console.error("Erro ao enviar dados:", error);
-            });
-        */
-
         // Limpa os campos após salvar
         setCidade("");
         setEnderecoInput("");
@@ -360,6 +386,28 @@ function Cadastro() {
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+
+                    {/* Botão para carregar o mapa com a localização atual */}
+                    <button
+                        onClick={obterLocalizacaoUsuario}
+                        className="w-full mt-4 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                        Carregar Mapa com Minha Localização
+                    </button>
+
+                    {/* Mapa */}
+                    {mostrarMapa && (
+                        <div>
+                            <div id="mapa" style={{ height: '400px', width: '100%', marginTop: '16px' }}></div>
+                            {/* Botão para fechar o mapa */}
+                            <button
+                                onClick={fecharMapa}
+                                className="w-full mt-4 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                            >
+                                Fechar Mapa
+                            </button>
+                        </div>
+                    )}
 
                     {/* ComboBox para "Selecione" */}
                     <ComboBox

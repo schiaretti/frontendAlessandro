@@ -11,7 +11,7 @@ function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/cadastro" element={<Cadastro/>} />
-        <Route path='/login' element={<Login/>} />
+        <Route path='/' element={<Login/>} />
       </Routes>
       </ErrorBoundary>
     </BrowserRouter>

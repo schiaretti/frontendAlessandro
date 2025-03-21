@@ -4,13 +4,14 @@ import Cadastro from './pages/Cadastro';
 import Login from './pages/Login'
 import ErrorBoundary from './components/ErrorBoundary';
 
+
 function App() {
   return (
     <BrowserRouter>
     <ErrorBoundary>
       <Routes>
         <Route path="/cadastro" element={<Cadastro/>} />
-        <Route path='/' element={<Login/>} />
+        <Route path='/login' element={<Login/>} />
       </Routes>
       </ErrorBoundary>
     </BrowserRouter>

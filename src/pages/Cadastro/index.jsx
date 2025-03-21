@@ -6,6 +6,7 @@ import ComboBox from "../../components/ComboBox.jsx";
 import BotaoArvore from "../../components/botaoArvore.jsx";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import axios from 'axios'
 
 function Cadastro() {
     const [isLastPost, setIsLastPost] = useState(false);
@@ -51,7 +52,7 @@ function Cadastro() {
 
     // Preenche os campos automaticamente quando o endereço é obtido
     useEffect(() => {
-        if (endereco) {
+        if (endereco && endereco.cidade && endereco.rua && endereco.cep) {
             setCidade(endereco.cidade);
             setEnderecoInput(endereco.rua);
             setCep(endereco.cep);
@@ -80,7 +81,6 @@ function Cadastro() {
         }
     };
 
-    // Inicializa o mapa com as coordenadas do usuário
     useEffect(() => {
         if (mostrarMapa && userCoords) {
             if (!document.getElementById('mapa')._leaflet_map) {
@@ -90,17 +90,26 @@ function Cadastro() {
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(mapa);
 
-                L.marker(userCoords).addTo(mapa) // Adiciona um marcador na localização do usuário
+                // Adiciona um círculo azul na localização do usuário
+                L.circle(userCoords, {
+                    color: 'blue',       // Cor da borda do círculo
+                    fillColor: '#30f',  // Cor de preenchimento do círculo
+                    fillOpacity: 1,    // Opacidade do preenchimento
+                    radius: 10          // Raio do círculo em metros
+                }).addTo(mapa)
                     .bindPopup('Você está aqui!')
                     .openPopup();
             }
         }
     }, [mostrarMapa, userCoords]);
 
-    // Função para fechar o mapa
     const fecharMapa = () => {
-        setMostrarMapa(false); // Oculta o mapa
-        setUserCoords(null); // Limpa as coordenadas
+        const mapElement = document.getElementById('mapa');
+        if (mapElement && mapElement._leaflet_map) {
+            mapElement._leaflet_map.remove(); // Remove o mapa do DOM
+        }
+        setMostrarMapa(false);
+        setUserCoords(null);
     };
 
     // Função para lidar com a foto panorâmica
@@ -219,7 +228,15 @@ function Cadastro() {
     };
 
     // Função para salvar o cadastro
-    const handleSalvarCadastro = () => {
+    const  handleSalvarCadastro = async () => {
+        if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom || !concentrador || !poste
+            || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco || !quantidadePontos || !tipoLampada || !potenciaLampada
+            || !tipoReator || !tipoComando || !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento
+            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao || !especieArvore
+        ) {
+            alert("Preencha todos os campos obrigatórios!");
+            return;
+        }
         const formData = {
             coords,
             cidade,
@@ -255,38 +272,56 @@ function Cadastro() {
             especieArvore,
         };
 
-        console.log("Dados do formulário:", formData);
+        try {
+            // Envia os dados para o backend
+            const response = await axios.post('https://apialessandro-production.up.railway.app/', formData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
 
-        // Limpa os campos após salvar
-        setCidade("");
-        setEnderecoInput("");
-        setNumero("");
-        setCep("");
-        setLocalizacao("");
-        setTransformador("");
-        setMedicao("");
-        setTelecom("");
-        setConcentrador("");
-        setPoste("");
-        setalturaPoste("");
-        setestruturaPoste("");
-        settipoBraco("");
-        settamanhoBraco("");
-        setquantidadePontos("");
-        settipoLampada("");
-        settipoReator("");
-        settipoComando("");
-        settipoRede("");
-        settipoCabo("");
-        setnumeroFases("");
-        settipoVia("");
-        sethierarquiaVia("");
-        settipoPavimento("");
-        setquantidadeFaixas("");
-        settipoPasseio("");
-        setcanteiroCentral("");
-        setfinalidadeInstalacao("");
-        setespecieArvore("");
+            if (response.status === 200 || response.status === 201) {
+                alert("Cadastro salvo com sucesso!");
+                console.log("Resposta do backend:", response.data);
+
+
+                // Limpa os campos após salvar
+                setCidade("");
+                setEnderecoInput("");
+                setNumero("");
+                setCep("");
+                setLocalizacao("");
+                setTransformador("");
+                setMedicao("");
+                setTelecom("");
+                setConcentrador("");
+                setPoste("");
+                setalturaPoste("");
+                setestruturaPoste("");
+                settipoBraco("");
+                settamanhoBraco("");
+                setquantidadePontos("");
+                settipoLampada("");
+                settipoReator("");
+                settipoComando("");
+                settipoRede("");
+                settipoCabo("");
+                setnumeroFases("");
+                settipoVia("");
+                sethierarquiaVia("");
+                settipoPavimento("");
+                setquantidadeFaixas("");
+                settipoPasseio("");
+                setcanteiroCentral("");
+                setfinalidadeInstalacao("");
+                setespecieArvore("");
+            } else {
+                alert("Erro ao salvar o cadastro. Tente novamente.");
+            }
+        } catch (error) {
+            console.error("Erro ao enviar dados para o backend:", error);
+            alert("Erro ao salvar o cadastro. Verifique sua conexão e tente novamente.");
+        }
     };
 
     return (
@@ -296,21 +331,7 @@ function Cadastro() {
                     Começar cadastro
                 </h1>
 
-                {/* Checkbox para "Último Poste da Rua" */}
-                <Checkbox
-                    label="Este é o último poste da rua"
-                    checked={isLastPost}
-                    onChange={(e) => setIsLastPost(e.target.checked)}
-                />
-
                 <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                {/* Mensagem explicativa */}
-                {!isFirstPostRegistered && !isLastPost && (
-                    <p className="mt-2 font-bold text-gray-500 text-center">
-                        Só marque a opção a cima se for o último poste da rua!!!
-                    </p>
-                )}
 
                 {/* Campos de entrada */}
                 <div className="space-y-4 mt-4">
@@ -320,11 +341,13 @@ function Cadastro() {
                         </label>
                         <input
                             type="text"
-                            value={coords ? coords[0] : ""}
+                            value={coords && coords.length >= 2 ? coords[0] : ""}
                             readOnly
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700">
@@ -332,11 +355,13 @@ function Cadastro() {
                         </label>
                         <input
                             type="text"
-                            value={coords ? coords[1] : ""}
+                            value={coords && coords.length >= 2 ? coords[1] : ""}
                             readOnly
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700">
@@ -350,6 +375,8 @@ function Cadastro() {
                         />
                     </div>
 
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700">
                             Endereço
@@ -361,6 +388,8 @@ function Cadastro() {
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700">
@@ -377,6 +406,8 @@ function Cadastro() {
                         />
                     </div>
 
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700">CEP</label>
                         <input
@@ -386,6 +417,23 @@ function Cadastro() {
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    {/* ComboBox para "Selecione" */}
+                    <ComboBox
+                        label="Selecione"
+                        options={[
+                            { value: "Em Frente", label: "Em Frente" },
+                            { value: "Sem Número", label: "Sem Número" },
+                            { value: "Praça", label: "Praça" },
+                            { value: "Viela", label: "Viela" },
+                        ]}
+                        onChange={handleLocalizacaoChange}
+                        className="mb-4"
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* Botão para carregar o mapa com a localização atual */}
                     <button
@@ -409,20 +457,7 @@ function Cadastro() {
                         </div>
                     )}
 
-                    {/* ComboBox para "Selecione" */}
-                    <ComboBox
-                        label="Selecione"
-                        options={[
-                            { value: "Em Frente", label: "Em Frente" },
-                            { value: "Sem Número", label: "Sem Número" },
-                            { value: "Praça", label: "Praça" },
-                            { value: "Viela", label: "Viela" },
-                        ]}
-                        onChange={handleLocalizacaoChange}
-                        className="mb-4"
-                    />
 
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* Seção de captura de fotos */}
                     <div className="mt-6">
@@ -844,8 +879,8 @@ function Cadastro() {
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                        <div className="col-span-1 md:col-span-2 mb-4">
-                            <label className="mb-4 text-gray-700 font-extrabold text-2xl ">Largura do canteiro central</label>
+                        <div className="col-span-1 md:col-span-2 mb-4 text-center">
+                            <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
                             <input
                                 placeholder="Em Metros"
                                 type="text"
@@ -855,8 +890,8 @@ function Cadastro() {
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                        <div className="col-span-1 md:col-span-2">
-                            <label className="mb-4 text-gray-700 font-extrabold text-2xl ">Distância entre postes</label>
+                        <div className="col-span-1 md:col-span-2 text-center">
+                            <label className="mb-4 text-gray-700 font-extrabold ">Distância entre postes ?</label>
                             <input
                                 placeholder="Em Metros"
                                 type="text"
@@ -870,6 +905,7 @@ function Cadastro() {
                             label="Finalidade da Instalação ?"
                             options={[
                                 { value: "Viária", label: "Viária" },
+                                { value: "Cemitério", label: "Cemitério" },
                                 { value: "Praça", label: "Praça" },
                                 { value: "Espaço municipal", label: "Espaço municipal" },
                                 { value: "Ciclo via", label: "Ciclo via" },
@@ -880,10 +916,21 @@ function Cadastro() {
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
+                        {/* Checkbox para "Último Poste da Rua" */}
+                        <Checkbox
+                            label="Este é o último poste da rua"
+                            checked={isLastPost}
+                            onChange={(e) => setIsLastPost(e.target.checked)}
+                        />
 
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-
-
+                        {/* Mensagem explicativa */}
+                        {!isFirstPostRegistered && !isLastPost && (
+                            <p className="mt-2 font-bold text-gray-500 text-center">
+                                Só marque a opção acima se for o último poste da rua!!!
+                            </p>
+                        )}
 
                     </div>
 

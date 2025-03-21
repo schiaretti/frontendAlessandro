@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useRef } from "react";
-//import api from "../services/api"; // Ajuste para o caminho correto da API
+import api from "../../services/api"; // Ajuste para o caminho correto da API
 
 function Login() {
   const emailRef = useRef(null); // Referência para o campo de email
@@ -25,7 +25,7 @@ function Login() {
 
     try {
       // Fazendo a requisição para o backend (comentado por enquanto)
-      //const { data } = await api.post("/login", { email, senha });
+      const { data } = await api.post("/login", { email, senha });
 
       // Redirecionando para a página de maps
       navigate("/cadastro");

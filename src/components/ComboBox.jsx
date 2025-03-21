@@ -5,7 +5,7 @@ const ComboBox = ({ label, options, onChange, className }) => {
     <div className={`flex flex-col text-center ${className}`}>
       {/* Label do ComboBox */}
       {label && (
-        <label className="mb-2 text-gray-700 font-extrabold text-2xl">
+        <label className="mb-2 text-gray-700 font-extrabold ">
           {label}
         </label>
       )}

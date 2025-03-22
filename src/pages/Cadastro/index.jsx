@@ -229,10 +229,18 @@ function Cadastro() {
 
     // Função para salvar o cadastro
     const  handleSalvarCadastro = async () => {
+
+        const token = localStorage.getItem('token'); // Recupera o token do localStorage
+
+        if (!token) {
+            alert('Usuário não autenticado. Faça login novamente.');
+            return;
+        }
+
         if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom || !concentrador || !poste
             || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco || !quantidadePontos || !tipoLampada || !potenciaLampada
             || !tipoReator || !tipoComando || !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento
-            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao || !especieArvore
+            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao 
         ) {
             alert("Preencha todos os campos obrigatórios!");
             return;
@@ -273,16 +281,18 @@ function Cadastro() {
         };
 
         try {
-            // Envia os dados para o backend
-            const response = await axios.post('https://apialessandro-production.up.railway.app/', formData, {
-                headers: {
-                    'Content-Type': 'application/json',
+                // Envia os dados para o backend com o token no cabeçalho
+        const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`, // Envia o token no cabeçalho
+
                 },
             });
 
             if (response.status === 200 || response.status === 201) {
                 alert("Cadastro salvo com sucesso!");
-                console.log("Resposta do backend:", response.data);
+                console.log("Resposta do backend:", response.data);              
 
 
                 // Limpa os campos após salvar

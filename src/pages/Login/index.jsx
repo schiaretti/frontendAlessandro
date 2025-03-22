@@ -24,11 +24,21 @@ function Login() {
     }
 
     try {
-      // Fazendo a requisição para o backend (comentado por enquanto)
-      const { data } = await api.post("/login", { email, senha });
+      // Fazendo a requisição para o backend
+      const { data } = await api.post("/api/login", { email, senha });
 
-      // Redirecionando para a página de maps
-      navigate("/cadastro");
+      // Verifica se o token foi recebido
+      if (data.token) {
+        // Armazena o token no localStorage
+        localStorage.setItem("token", data.token);
+        console.log("Token armazenado:", data.token);
+
+        // Redireciona para a página de cadastro
+        navigate("/cadastro");
+      } else {
+        console.error("Token não recebido na resposta:", data);
+        alert("Erro ao fazer login. Tente novamente!");
+      }
     } catch (err) {
       console.error("Erro ao fazer login:", err);
       alert("Usuário ou senha inválidos!");
@@ -55,7 +65,6 @@ function Login() {
           Login
         </button>
       </form>
-    
     </div>
   );
 }

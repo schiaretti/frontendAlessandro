@@ -48,14 +48,14 @@ function useGetLocation(isLastPost) {
           rua: road || "Rua desconhecida",
           cidade: city || town || village || "Cidade desconhecida",
           cep: postcode || "CEP não disponível",
-          numero: house_number || "Número não disponível",
+          numero: house_number || "",
         });
       } else {
         setEndereco({
           rua: "Endereço não encontrado",
           cidade: "Cidade não encontrada",
           cep: "CEP não disponível",
-          numero: "Número não disponível",
+          numero: "",
         });
       }
     } catch (error) {

@@ -9,18 +9,21 @@ import 'leaflet/dist/leaflet.css';
 import axios from 'axios'
 
 function Cadastro() {
+    // Estados de controle
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
-    const { coords, endereco } = useGetLocation(isLastPost || isFirstPostRegistered);
     const [mostrarMapa, setMostrarMapa] = useState(false);
-    const [userCoords, setUserCoords] = useState(null); // Estado para armazenar as coordenadas do usuário
+    const [userCoords, setUserCoords] = useState(null);
+    const [localizacaoError, setLocalizacaoError] = useState(null);
+    const [isNumeroManual, setIsNumeroManual] = useState(false);
+    const [postesCadastrados, setPostesCadastrados] = useState([]);
+    const [mapInstance, setMapInstance] = useState(null);
 
-    // Estados para os campos de entrada
+    // Estados do formulário
     const [cidade, setCidade] = useState("");
     const [enderecoInput, setEnderecoInput] = useState("");
     const [numero, setNumero] = useState("");
     const [cep, setCep] = useState("");
-    const [isNumeroManual, setIsNumeroManual] = useState(false);
 
     // Estados para os ComboBox
     const [localizacao, setLocalizacao] = useState("");
@@ -50,63 +53,146 @@ function Cadastro() {
     const [finalidadeInstalacao, setfinalidadeInstalacao] = useState("");
     const [especieArvore, setespecieArvore] = useState("");
 
+
+    const { coords, endereco, error: locationError, isLoading: isLoadingLocation } = useGetLocation(isLastPost || isFirstPostRegistered);
+
+
     // Preenche os campos automaticamente quando o endereço é obtido
     useEffect(() => {
-        if (endereco && endereco.cidade && endereco.rua && endereco.cep) {
-            setCidade(endereco.cidade);
-            setEnderecoInput(endereco.rua);
-            setCep(endereco.cep);
+        if (endereco) {
+            const updates = {
+                cidade: endereco.cidade || cidade,
+                enderecoInput: endereco.rua || enderecoInput,
+                cep: endereco.cep || cep
+            };
+
             if (!isNumeroManual) {
-                setNumero(endereco.numero || "");
+                updates.numero = endereco.numero || numero;
+            }
+
+            // Atualiza apenas os campos que mudaram
+            if (updates.cidade !== cidade) setCidade(updates.cidade);
+            if (updates.enderecoInput !== enderecoInput) setEnderecoInput(updates.enderecoInput);
+            if (updates.cep !== cep) setCep(updates.cep);
+            if (updates.numero !== undefined && updates.numero !== numero) setNumero(updates.numero);
+
+            // Preenche o bairro se existir no endereço
+            if (endereco.bairro && !localizacao) {
+                setLocalizacao(endereco.bairro);
             }
         }
     }, [endereco, isNumeroManual]);
 
-    // Função para obter a localização do usuário
-    const obterLocalizacaoUsuario = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    setUserCoords([latitude, longitude]); // Armazena as coordenadas no estado
-                    setMostrarMapa(true); // Mostra o mapa
-                },
-                (error) => {
-                    console.error("Erro ao obter localização:", error);
-                    alert("Não foi possível obter sua localização. Verifique as permissões do navegador.");
-                }
-            );
-        } else {
-            alert("Geolocalização não é suportada pelo seu navegador.");
+    const obterLocalizacaoUsuario = async () => {
+        setLocalizacaoError(null);
+        setMostrarMapa(false); // Reset antes de tentar novamente
+
+        try {
+            if (!navigator.geolocation) {
+                throw new Error("Geolocalização não suportada pelo navegador");
+            }
+
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                });
+            });
+
+            const { latitude, longitude, accuracy } = position.coords;
+            if (accuracy > 15) {
+                setLocalizacaoError(`Precisão baixa (${Math.round(accuracy)}m). Aproxime-se do poste.`);
+            }
+
+            setUserCoords([latitude, longitude]);
+            setMostrarMapa(true);
+
+        } catch (error) {
+            console.error("Erro ao obter localização:", error);
+            let errorMessage = "Não foi possível obter localização precisa.";
+
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Permissão de localização negada. Por favor, habilite no navegador.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Localização indisponível.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Tempo de espera excedido ao obter localização.";
+                    break;
+            }
+
+            setLocalizacaoError(errorMessage);
         }
     };
 
+    // Função para mostrar mapa
     useEffect(() => {
-        if (mostrarMapa && userCoords) {
-            if (!document.getElementById('mapa')._leaflet_map) {
-                const mapa = L.map('mapa').setView(userCoords, 13); // Usa as coordenadas do usuário
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(mapa);
-
-                // Adiciona um círculo azul na localização do usuário
-                L.circle(userCoords, {
-                    color: 'blue',       // Cor da borda do círculo
-                    fillColor: '#30f',  // Cor de preenchimento do círculo
-                    fillOpacity: 1,    // Opacidade do preenchimento
-                    radius: 10          // Raio do círculo em metros
-                }).addTo(mapa)
-                    .bindPopup('Você está aqui!')
-                    .openPopup();
-            }
+        if (!mostrarMapa || !userCoords) return;
+    
+        // Cria o mapa se não existir
+        if (!mapInstance) {
+            const newMap = L.map('mapa').setView(userCoords, 18);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(newMap);
+    
+            // Adiciona o círculo azul da localização atual
+            L.circle(userCoords, {
+                color: 'blue',
+                fillColor: '#30f',
+                fillOpacity: 1,
+                radius: 5
+            }).addTo(newMap);
+    
+            setMapInstance(newMap);
+        } else {
+            // Se o mapa já existe, apenas atualiza a view e os marcadores
+            mapInstance.setView(userCoords);
+            
+            // Limpa marcadores antigos (exceto o tileLayer)
+            mapInstance.eachLayer(layer => {
+                if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+                    mapInstance.removeLayer(layer);
+                }
+            });
+    
+            // Adiciona novamente o círculo azul
+            L.circle(userCoords, {
+                color: 'blue',
+                fillColor: '#30f',
+                fillOpacity: 1,
+                radius: 5
+            }).addTo(mapInstance);
         }
-    }, [mostrarMapa, userCoords]);
+    
+        // Adiciona postes cadastrados
+        postesCadastrados.forEach((poste, index) => {
+            L.circleMarker(poste.coords, {
+                color: '#808080',
+                fillColor: '#A9A9A9',
+                fillOpacity: 0.8,
+                radius: 4
+            }).addTo(mapInstance)
+                .bindPopup(`Poste #${index + 1}<br>${poste.endereco}`);
+        });
+    
+        return () => {
+            // Limpeza quando o componente desmontar ou quando mostrarMapa mudar para false
+            if (mapInstance && !mostrarMapa) {
+                mapInstance.remove();
+                setMapInstance(null);
+            }
+        };
+    }, [mostrarMapa, userCoords, postesCadastrados]);
 
     const fecharMapa = () => {
-        const mapElement = document.getElementById('mapa');
-        if (mapElement && mapElement._leaflet_map) {
-            mapElement._leaflet_map.remove(); // Remove o mapa do DOM
+        if (mapInstance) {
+            mapInstance.remove();
+            setMapInstance(null);
         }
         setMostrarMapa(false);
         setUserCoords(null);
@@ -228,7 +314,11 @@ function Cadastro() {
     };
 
     // Função para salvar o cadastro
-    const  handleSalvarCadastro = async () => {
+    const handleSalvarCadastro = async () => {
+        if (!coords || coords.length < 2) {
+            alert("Não foi possível obter coordenadas válidas!");
+            return;
+        }
 
         const token = localStorage.getItem('token'); // Recupera o token do localStorage
 
@@ -240,7 +330,7 @@ function Cadastro() {
         if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom || !concentrador || !poste
             || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco || !quantidadePontos || !tipoLampada || !potenciaLampada
             || !tipoReator || !tipoComando || !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento
-            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao 
+            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao
         ) {
             alert("Preencha todos os campos obrigatórios!");
             return;
@@ -281,19 +371,26 @@ function Cadastro() {
         };
 
         try {
-                // Envia os dados para o backend com o token no cabeçalho
-        const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`, // Envia o token no cabeçalho
+            // Envia os dados para o backend com o token no cabeçalho
+            const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`, // Envia o token no cabeçalho
 
                 },
             });
 
             if (response.status === 200 || response.status === 201) {
                 alert("Cadastro salvo com sucesso!");
-                console.log("Resposta do backend:", response.data);              
+                console.log("Resposta do backend:", response.data);
 
+                // Adiciona o novo poste ao estado
+                const novoPoste = {
+                    coords: coords,
+                    endereco: `${enderecoInput}, ${numero} - ${cidade}`,
+                    data: new Date().toLocaleString()
+                };
+                setPostesCadastrados([...postesCadastrados, novoPoste]);
 
                 // Limpa os campos após salvar
                 setCidade("");
@@ -449,9 +546,22 @@ function Cadastro() {
                     <button
                         onClick={obterLocalizacaoUsuario}
                         className="w-full mt-4 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        disabled={isLoadingLocation} // Desabilita durante o carregamento
                     >
-                        Carregar Mapa com Minha Localização
+                        {isLoadingLocation ? 'Obtendo localização...' : 'Carregar Mapa com Minha Localização'}
                     </button>
+
+                    {localizacaoError && (
+                        <div className="mt-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded">
+                            {localizacaoError}
+                        </div>
+                    )}
+
+                    {locationError && (
+                        <div className="mt-2 p-2 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+                            Aviso: {locationError}
+                        </div>
+                    )}
 
                     {/* Mapa */}
                     {mostrarMapa && (

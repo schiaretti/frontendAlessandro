@@ -18,6 +18,7 @@ function Cadastro() {
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [postesCadastrados, setPostesCadastrados] = useState([]);
     const [mapInstance, setMapInstance] = useState(null);
+    const [fotosSelecionadas, setFotosSelecionadas] = useState([]);
 
     // Estados do formulário
     const [cidade, setCidade] = useState("");
@@ -314,7 +315,7 @@ function Cadastro() {
     };
 
     // Função para salvar o cadastro
-    const handleSalvarCadastro = async () => {
+   /* const handleSalvarCadastro = async () => {
         if (!coords || coords.length < 2) {
             alert("Não foi possível obter coordenadas válidas!");
             return;
@@ -335,9 +336,10 @@ function Cadastro() {
             alert("Preencha todos os campos obrigatórios!");
             return;
         }
-        const formData = {
-            coords,
-            cidade,
+        
+        const formData = ();
+        formData.append('coords', JSON.stringify(coords));
+        formData.append('cidade', cidade);
             endereco: enderecoInput,
             numero,
             cep,
@@ -428,6 +430,107 @@ function Cadastro() {
         } catch (error) {
             console.error("Erro ao enviar dados para o backend:", error);
             alert("Erro ao salvar o cadastro. Verifique sua conexão e tente novamente.");
+        }
+    };*/
+
+    const handleSalvarCadastro = async () => {
+        if (!coords || coords.length < 2) {
+            alert("Não foi possível obter coordenadas válidas!");
+            return;
+        }
+    
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('Usuário não autenticado. Faça login novamente.');
+            return;
+        }
+    
+        // Verificação de campos obrigatórios
+        if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom ||
+            !concentrador || !poste || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco ||
+            !quantidadePontos || !tipoLampada || !potenciaLampada || !tipoReator || !tipoComando ||
+            !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento ||
+            !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao) {
+            alert("Preencha todos os campos obrigatórios!");
+            return;
+        }
+    
+        try {
+            const formData = new FormData();
+            
+            // Adiciona as coordenadas
+            formData.append('coords', JSON.stringify(coords));
+            
+            // Adiciona todos os campos do formulário
+            formData.append('cidade', cidade);
+            formData.append('endereco', enderecoInput);
+            formData.append('numero', numero);
+            formData.append('cep', cep);
+            formData.append('isLastPost', isLastPost);
+            formData.append('localizacao', localizacao);
+            formData.append('transformador', transformador);
+            formData.append('medicao', medicao);
+            formData.append('telecom', telecom);
+            formData.append('concentrador', concentrador);
+            formData.append('poste', poste);
+            formData.append('alturaposte', alturaposte);
+            formData.append('estruturaposte', estruturaposte);
+            formData.append('tipoBraco', tipoBraco);
+            formData.append('tamanhoBraco', tamanhoBraco);
+            formData.append('quantidadePontos', quantidadePontos);
+            formData.append('tipoLampada', tipoLampada);
+            formData.append('potenciaLampada', potenciaLampada);
+            formData.append('tipoReator', tipoReator);
+            formData.append('tipoComando', tipoComando);
+            formData.append('tipoRede', tipoRede);
+            formData.append('tipoCabo', tipoCabo);
+            formData.append('numeroFases', numeroFases);
+            formData.append('tipoVia', tipoVia);
+            formData.append('hierarquiaVia', hierarquiaVia);
+            formData.append('tipoPavimento', tipoPavimento);
+            formData.append('quantidadeFaixas', quantidadeFaixas);
+            formData.append('tipoPasseio', tipoPasseio);
+            formData.append('canteiroCentral', canteiroCentral);
+            formData.append('finalidadeInstalacao', finalidadeInstalacao);
+            formData.append('especieArvore', especieArvore);
+    
+            // Adiciona as fotos se existirem
+            if (fotosSelecionadas) {
+                fotosSelecionadas.forEach(foto => {
+                    formData.append('fotos', foto);
+                });
+            }
+    
+            // Envia os dados para o backend
+            const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`
+                }
+            });
+    
+            if (response.status === 200 || response.status === 201) {
+                alert("Cadastro salvo com sucesso!");
+                
+                // Atualiza o estado local com o novo poste
+                const novoPoste = {
+                    coords: coords,
+                    endereco: `${enderecoInput}, ${numero} - ${cidade}`,
+                    data: new Date().toLocaleString()
+                };
+                setPostesCadastrados([...postesCadastrados, novoPoste]);
+    
+                // Limpa os campos após salvar
+                setCidade("");
+                setEnderecoInput("");
+                setNumero("");
+                setCep("");
+                // ... (limpar outros campos conforme necessário)
+            }
+    
+        } catch (error) {
+            console.error("Erro ao salvar:", error);
+            alert(`Erro ao salvar: ${error.response?.data?.message || error.message}`);
         }
     };
 

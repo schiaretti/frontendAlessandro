@@ -28,10 +28,17 @@ function Login() {
       const { data } = await api.post("/api/login", { email, senha });
 
       // Verifica se o token foi recebido
-      if (data.token) {
-        // Armazena o token no localStorage
-        localStorage.setItem("token", data.token);
-        console.log("Token armazenado:", data.token);
+      /* if (data.token) {
+         // Armazena o token no localStorage
+         localStorage.setItem("token", data.token);
+         console.log("Token armazenado:", data.token);*/
+      // Verifica se a resposta é o token puro OU está dentro de .token
+      const receivedToken = typeof data === 'string' ? data : data.token;
+
+      if (receivedToken) {
+        localStorage.setItem("token", receivedToken);
+        console.log("Token armazenado:", receivedToken);
+        navigate("/cadastro");
 
         // Redireciona para a página de cadastro
         navigate("/cadastro");

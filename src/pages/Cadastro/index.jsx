@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+/*import React, { useState, useEffect } from "react";
 import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
@@ -19,6 +19,8 @@ function Cadastro() {
     const [postesCadastrados, setPostesCadastrados] = useState([]);
     const [mapInstance, setMapInstance] = useState(null);
     const [fotosSelecionadas, setFotosSelecionadas] = useState([]);
+    const [userAccuracy, setUserAccuracy] = useState(10);
+
 
     // Estados do formulário
     const [cidade, setCidade] = useState("");
@@ -59,7 +61,7 @@ function Cadastro() {
 
 
     // Preenche os campos automaticamente quando o endereço é obtido
-    useEffect(() => {
+   /* useEffect(() => {
         if (endereco) {
             const updates = {
                 cidade: endereco.cidade || cidade,
@@ -96,17 +98,674 @@ function Cadastro() {
             const position = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
                     enableHighAccuracy: true,
-                    timeout: 15000,
+                    timeout: 20000,
                     maximumAge: 0
                 });
             });
 
             const { latitude, longitude, accuracy } = position.coords;
-            if (accuracy > 15) {
-                setLocalizacaoError(`Precisão baixa (${Math.round(accuracy)}m). Aproxime-se do poste.`);
+            setUserCoords([latitude, longitude]);
+            setMostrarMapa(true);
+
+            if (typeof capturarLocalizacaoParaSalvar === 'function') {
+                capturarLocalizacaoParaSalvar(); // Atualiza as coordenadas no hook
             }
 
+            setMostrarMapa(true);
+
+
+        } catch (error) {
+            console.error("Erro ao obter localização:", error);
+            let errorMessage = "Não foi possível obter localização precisa.";
+
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Permissão de localização negada. Por favor, habilite no navegador.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Localização indisponível.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Tempo de espera excedido ao obter localização.";
+                    break;
+            }
+            setLocalizacaoError(errorMessage);
+            setMostrarMapa(false); // Garante que o mapa não será exibido com erro
+
+        }
+    };
+
+    // Função para mostrar mapa
+
+    useEffect(() => {
+        if (!mostrarMapa || !userCoords) return;
+        let newMap;
+        if (!mapInstance) {
+            // Criação inicial do mapa
+            newMap = L.map('mapa', {
+                zoomControl: true,
+                preferCanvas: true // Melhor performance para muitos marcadores
+            }).setView(userCoords, 18);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(newMap);
+
+            // Forçar redesenho do mapa
+            setTimeout(() => {
+                newMap.invalidateSize();
+            }, 100);
+
+            setMapInstance(newMap);
+        } else {
+            // Atualização do mapa existente
+            mapInstance.setView(userCoords);
+            newMap = mapInstance;
+        }
+
+        // Limpa apenas os marcadores (preserva o tileLayer)
+        newMap.eachLayer(layer => {
+            if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+                newMap.removeLayer(layer);
+            }
+        });
+
+
+
+        // Adiciona marcador da localização atual
+        L.circle(userCoords, {
+            color: '#0066ff', // Azul mais vibrante
+            fillColor: '#0066ff', // Mesma cor para preenchimento
+            fillOpacity: 1, // Opacidade total (sem transparência)
+            weight: 2, // Espessura da borda
+            radius: 5, // Raio fixo menor (em metros)
+        }).addTo(newMap)
+        //.bindPopup(`Precisão: ${Math.round(userAccuracy)} metros`);
+
+        // Adiciona marcadores dos postes cadastrados
+        if (postesCadastrados?.length > 0) {
+            const markers = L.layerGroup(); // Grupo para todos os marcadores
+
+            postesCadastrados.forEach((poste, index) => {
+                L.circleMarker(poste.coords, {
+                    color: '#808080',
+                    fillColor: '#A9A9A9',
+                    fillOpacity: 0.8,
+                    radius: 6
+                }).addTo(markers)
+                    .bindPopup(`
+                    <b>Poste #${index + 1}</b><br>
+                    ${poste.endereco}<br>
+                    <small>${new Date(poste.data).toLocaleString()}</small>
+                `);
+            });
+
+            markers.addTo(newMap);
+        }
+
+        return () => {
+            if (!mostrarMapa && mapInstance) {
+                mapInstance.remove();
+                setMapInstance(null);
+            }
+        };
+    }, [mostrarMapa, userCoords, postesCadastrados, userAccuracy, mapInstance]);
+
+    const fecharMapa = () => {
+        if (mapInstance) {
+            mapInstance.remove();
+            setMapInstance(null);
+        }
+        setMostrarMapa(false);
+        setUserCoords(null);
+    };*/
+
+// Função para buscar postes cadastrados
+/* const fetchPostesCadastrados = async () => {
+  try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await axios.get('https://apialessandro-production.up.railway.app/api/postes', {
+          headers: {
+              Authorization: `Bearer ${token}`
+          }
+      });
+
+      if (response.data) {
+          setPostesCadastrados(response.data);
+      }
+  } catch (error) {
+      console.error("Erro ao buscar postes:", error);
+  }
+};
+
+// Carrega os postes cadastrados quando o componente monta
+useEffect(() => {
+  fetchPostesCadastrados();
+}, []);
+
+// Preenche os campos automaticamente quando o endereço é obtido
+useEffect(() => {
+  if (endereco) {
+      const updates = {
+          cidade: endereco.cidade || cidade,
+          enderecoInput: endereco.rua || enderecoInput,
+          cep: endereco.cep || cep
+      };
+
+      if (!isNumeroManual) {
+          updates.numero = endereco.numero || numero;
+      }
+
+      // Atualiza apenas os campos que mudaram
+      if (updates.cidade !== cidade) setCidade(updates.cidade);
+      if (updates.enderecoInput !== enderecoInput) setEnderecoInput(updates.enderecoInput);
+      if (updates.cep !== cep) setCep(updates.cep);
+      if (updates.numero !== undefined && updates.numero !== numero) setNumero(updates.numero);
+
+      // Preenche o bairro se existir no endereço
+      if (endereco.bairro && !localizacao) {
+          setLocalizacao(endereco.bairro);
+      }
+  }
+}, [endereco, isNumeroManual]);
+
+const obterLocalizacaoUsuario = async () => {
+  setLocalizacaoError(null);
+  setMostrarMapa(false);
+
+  try {
+      if (!navigator.geolocation) {
+          throw new Error("Geolocalização não suportada pelo navegador");
+      }
+
+      const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 20000,
+              maximumAge: 0
+          });
+      });
+
+      const { latitude, longitude, accuracy } = position.coords;
+      setUserCoords([latitude, longitude]);
+      setUserAccuracy(accuracy);
+      setMostrarMapa(true);
+
+  } catch (error) {
+      console.error("Erro ao obter localização:", error);
+      let errorMessage = "Não foi possível obter localização precisa.";
+
+      switch (error.code) {
+          case error.PERMISSION_DENIED:
+              errorMessage = "Permissão de localização negada. Por favor, habilite no navegador.";
+              break;
+          case error.POSITION_UNAVAILABLE:
+              errorMessage = "Localização indisponível.";
+              break;
+          case error.TIMEOUT:
+              errorMessage = "Tempo de espera excedido ao obter localização.";
+              break;
+      }
+      setLocalizacaoError(errorMessage);
+  }
+};
+
+// Configuração do mapa
+useEffect(() => {
+  if (!mostrarMapa || !userCoords) return;
+  
+  let newMap;
+  if (!mapInstance) {
+      newMap = L.map('mapa', {
+          zoomControl: true,
+          preferCanvas: true
+      }).setView(userCoords, 18);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19
+      }).addTo(newMap);
+
+      setTimeout(() => {
+          newMap.invalidateSize();
+      }, 100);
+
+      setMapInstance(newMap);
+  } else {
+      mapInstance.setView(userCoords);
+      newMap = mapInstance;
+  }
+
+  // Limpa marcadores antigos
+  newMap.eachLayer(layer => {
+      if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+          newMap.removeLayer(layer);
+      }
+  });
+
+  // Adiciona marcador da localização atual
+  L.circle(userCoords, {
+      color: '#0066ff',
+      fillColor: '#0066ff',
+      fillOpacity: 1,
+      weight: 2,
+      radius: 5,
+  }).addTo(newMap);
+
+  // Adiciona marcadores dos postes cadastrados
+  if (postesCadastrados?.length > 0) {
+      const markers = L.layerGroup();
+
+      postesCadastrados.forEach((poste, index) => {
+          L.circleMarker(poste.coords, {
+              color: '#808080',
+              fillColor: '#A9A9A9',
+              fillOpacity: 0.8,
+              radius: 6
+          }).addTo(markers)
+          .bindPopup(`
+              <b>Poste #${index + 1}</b><br>
+              ${poste.endereco}<br>
+              <small>${new Date(poste.data).toLocaleString()}</small>
+          `);
+      });
+
+      markers.addTo(newMap);
+  }
+
+  return () => {
+      if (!mostrarMapa && mapInstance) {
+          mapInstance.remove();
+          setMapInstance(null);
+      }
+  };
+}, [mostrarMapa, userCoords, postesCadastrados, mapInstance]);
+
+const fecharMapa = () => {
+  if (mapInstance) {
+      mapInstance.remove();
+      setMapInstance(null);
+  }
+  setMostrarMapa(false);
+};
+
+
+// Função para lidar com a foto panorâmica
+const handleFotoLuminaria = (fotoURL) => {
+  console.log("Foto da Panorâmica capturada:", fotoURL);
+};
+
+// Função para lidar com a foto da árvore
+const handleFotoArvore = (foto) => {
+  console.log("Foto da Árvore capturada:", foto);
+};
+
+// Funções para lidar com a seleção dos ComboBox
+const handleLocalizacaoChange = (value) => {
+  setLocalizacao(value);
+};
+
+const handleTransformadorChange = (value) => {
+  setTransformador(value);
+};
+
+const handleMedicaoChange = (value) => {
+  setMedicao(value);
+};
+
+const handleTelecomChange = (value) => {
+  setTelecom(value);
+};
+
+const handleConcentradorChange = (value) => {
+  setConcentrador(value);
+};
+
+const handlePosteChange = (value) => {
+  setPoste(value);
+};
+
+const handleAlturaPosteChange = (value) => {
+  setalturaPoste(value);
+};
+
+const handleEstruturaPosteChange = (value) => {
+  setestruturaPoste(value);
+};
+
+const handleTipoBracoChange = (value) => {
+  settipoBraco(value);
+};
+
+const handleTamanhoBracoChange = (value) => {
+  settamanhoBraco(value);
+};
+
+const handleQuantidadePontosChange = (value) => {
+  setquantidadePontos(value);
+};
+
+const handleTipoLampadaChange = (value) => {
+  settipoLampada(value);
+};
+
+const handlePotenciaLampadaChange = (value) => {
+  setpotenciaLampada(value);
+};
+
+const handletipoReator = (value) => {
+  settipoReator(value);
+};
+
+const handletipoComando = (value) => {
+  settipoComando(value);
+};
+
+const handletipoRede = (value) => {
+  settipoRede(value);
+};
+
+const handletipoCabo = (value) => {
+  settipoCabo(value);
+};
+
+const handlenumeroFases = (value) => {
+  setnumeroFases(value);
+};
+
+const handletipoVia = (value) => {
+  settipoVia(value);
+};
+
+const handlehierarquiaVia = (value) => {
+  sethierarquiaVia(value);
+};
+
+const handletipoPavimento = (value) => {
+  settipoPavimento(value);
+};
+
+const handlequantidadeFaixas = (value) => {
+  setquantidadeFaixas(value);
+};
+
+const handletipoPasseio = (value) => {
+  settipoPasseio(value);
+};
+
+const handlecanteiroCentral = (value) => {
+  setcanteiroCentral(value);
+};
+
+const handlefinalidadeInstalacao = (value) => {
+  setfinalidadeInstalacao(value);
+};
+
+const handleespecieArvore = (value) => {
+  setespecieArvore(value);
+};
+
+
+const handleSalvarCadastro = async () => {
+  if (!coords || coords.length < 2) {
+      alert("Não foi possível obter coordenadas válidas!");
+      return;
+  }
+ 
+  const token = localStorage.getItem('token');
+  if (!token) {
+      alert('Usuário não autenticado. Faça login novamente.');
+      return;
+  }
+ 
+  // Verificação de campos obrigatórios
+  if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom ||
+      !concentrador || !poste || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco ||
+      !quantidadePontos || !tipoLampada || !potenciaLampada || !tipoReator || !tipoComando ||
+      !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento ||
+      !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao) {
+      alert("Preencha todos os campos obrigatórios!");
+      return;
+  }
+ 
+  try {
+      const formData = new FormData();
+      
+      // Adiciona as coordenadas
+      formData.append('coords', JSON.stringify(coords));
+      
+      // Adiciona todos os campos do formulário
+      formData.append('cidade', cidade);
+      formData.append('endereco', enderecoInput);
+      formData.append('numero', numero);
+      formData.append('cep', cep);
+      formData.append('isLastPost', isLastPost);
+      formData.append('localizacao', localizacao);
+      formData.append('transformador', transformador);
+      formData.append('medicao', medicao);
+      formData.append('telecom', telecom);
+      formData.append('concentrador', concentrador);
+      formData.append('poste', poste);
+      formData.append('alturaposte', alturaposte);
+      formData.append('estruturaposte', estruturaposte);
+      formData.append('tipoBraco', tipoBraco);
+      formData.append('tamanhoBraco', tamanhoBraco);
+      formData.append('quantidadePontos', quantidadePontos);
+      formData.append('tipoLampada', tipoLampada);
+      formData.append('potenciaLampada', potenciaLampada);
+      formData.append('tipoReator', tipoReator);
+      formData.append('tipoComando', tipoComando);
+      formData.append('tipoRede', tipoRede);
+      formData.append('tipoCabo', tipoCabo);
+      formData.append('numeroFases', numeroFases);
+      formData.append('tipoVia', tipoVia);
+      formData.append('hierarquiaVia', hierarquiaVia);
+      formData.append('tipoPavimento', tipoPavimento);
+      formData.append('quantidadeFaixas', quantidadeFaixas);
+      formData.append('tipoPasseio', tipoPasseio);
+      formData.append('canteiroCentral', canteiroCentral);
+      formData.append('finalidadeInstalacao', finalidadeInstalacao);
+      formData.append('especieArvore', especieArvore);
+
+ 
+      // Adiciona as fotos se existirem
+      if (fotosSelecionadas) {
+          fotosSelecionadas.forEach((foto, index) => {
+              formData.append(`fotos_${index}`, foto);
+          });
+      }
+ 
+      // Envia os dados para o backend
+      const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
+          headers: {
+              'Content-Type': 'multipart/form-data',
+              Authorization: `Bearer ${token}`
+          }
+      });
+ 
+      if (response.status === 200 || response.status === 201) {
+          alert("Cadastro salvo com sucesso!");
+
+            // Atualiza a lista de postes
+            await fetchPostesCadastrados();
+          
+          // 1. Cria o objeto do novo poste com os dados atualizados
+          const novoPoste = {
+              coords: [...coords], // Cria uma cópia do array de coordenadas
+              endereco: `${enderecoInput}, ${numero} - ${cidade}`,
+              data: new Date().toISOString() // Formato mais consistente
+          };
+          
+          // 2. Atualiza o estado dos postes cadastrados
+          setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
+          
+          // 3. Adiciona imediatamente ao mapa se estiver visível
+          if (mostrarMapa && mapInstance) {
+              L.circleMarker([...coords], {
+                  color: '#808080',
+                  fillColor: '#A9A9A9',
+                  fillOpacity: 0.8,
+                  radius: 6
+              }).addTo(mapInstance)
+              .bindPopup(`<b>Novo Poste</b><br>${novoPoste.endereco}`);
+          }
+ 
+          // 4. Limpa os campos após salvar
+          setCidade("");
+          setEnderecoInput("");
+          setNumero("");
+          setCep("");
+          setFotosSelecionadas([]); // Limpa as fotos selecionadas
+          // ... (limpar outros campos conforme necessário)
+          
+          // 5. Opcional: Atualiza a lista completa do servidor
+          // await fetchPostesCadastrados(); // Descomente se quiser buscar todos postes novamente
+      }
+ 
+  } catch (error) {
+      console.error("Erro completo ao salvar:", error);
+      if (error.response) {
+          console.error("Dados da resposta:", error.response.data);
+          console.error("Status:", error.response.status);
+      }
+      alert(`Erro ao salvar: ${error.response?.data?.message || error.message}`);
+  }
+};*/
+
+
+import React, { useState, useEffect } from "react";
+import useGetLocation from "../../hooks/useGetLocation";
+import Checkbox from "../../components/checkBox.jsx";
+import BotaoCamera from "../../components/botaoCamera.jsx";
+import ComboBox from "../../components/ComboBox.jsx";
+import BotaoArvore from "../../components/botaoArvore.jsx";
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import axios from 'axios';
+
+function Cadastro() {
+    // Estados de controle
+    const [isLastPost, setIsLastPost] = useState(false);
+    const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
+    const [mostrarMapa, setMostrarMapa] = useState(false);
+    const [userCoords, setUserCoords] = useState(null);
+    const [localizacaoError, setLocalizacaoError] = useState(null);
+    const [isNumeroManual, setIsNumeroManual] = useState(false);
+    const [postesCadastrados, setPostesCadastrados] = useState([]);
+    const [mapInstance, setMapInstance] = useState(null);
+    const [fotosSelecionadas, setFotosSelecionadas] = useState([]);
+    const [userAccuracy, setUserAccuracy] = useState(10);
+
+    // Estados do formulário
+    const [cidade, setCidade] = useState("");
+    const [enderecoInput, setEnderecoInput] = useState("");
+    const [numero, setNumero] = useState("");
+    const [cep, setCep] = useState("");
+
+    // Estados para os ComboBox
+    const [localizacao, setLocalizacao] = useState("");
+    const [transformador, setTransformador] = useState("");
+    const [medicao, setMedicao] = useState("");
+    const [telecom, setTelecom] = useState("");
+    const [concentrador, setConcentrador] = useState("");
+    const [poste, setPoste] = useState("");
+    const [alturaposte, setalturaPoste] = useState("");
+    const [estruturaposte, setestruturaPoste] = useState("");
+    const [tipoBraco, settipoBraco] = useState("");
+    const [tamanhoBraco, settamanhoBraco] = useState("");
+    const [quantidadePontos, setquantidadePontos] = useState("");
+    const [tipoLampada, settipoLampada] = useState("");
+    const [potenciaLampada, setpotenciaLampada] = useState("");
+    const [tipoReator, settipoReator] = useState("");
+    const [tipoComando, settipoComando] = useState("");
+    const [tipoRede, settipoRede] = useState("");
+    const [tipoCabo, settipoCabo] = useState("");
+    const [numeroFases, setnumeroFases] = useState("");
+    const [tipoVia, settipoVia] = useState("");
+    const [hierarquiaVia, sethierarquiaVia] = useState("");
+    const [tipoPavimento, settipoPavimento] = useState("");
+    const [quantidadeFaixas, setquantidadeFaixas] = useState("");
+    const [tipoPasseio, settipoPasseio] = useState("");
+    const [canteiroCentral, setcanteiroCentral] = useState("");
+    const [finalidadeInstalacao, setfinalidadeInstalacao] = useState("");
+    const [especieArvore, setespecieArvore] = useState("");
+
+    const { coords, endereco, error: locationError, isLoading: isLoadingLocation } = useGetLocation(isLastPost || isFirstPostRegistered);
+
+    // Função para buscar postes cadastrados
+    const fetchPostesCadastrados = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await axios.get('https://apialessandro-production.up.railway.app/api/listar-postes', {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            if (response.data) {
+                setPostesCadastrados(response.data);
+            }
+        } catch (error) {
+            console.error("Erro ao buscar postes:", error);
+        }
+    };
+
+    // Carrega os postes cadastrados quando o componente monta
+    useEffect(() => {
+        fetchPostesCadastrados();
+    }, []);
+
+    // Preenche os campos automaticamente quando o endereço é obtido
+    useEffect(() => {
+        if (endereco) {
+            const updates = {
+                cidade: endereco.cidade || cidade,
+                enderecoInput: endereco.rua || enderecoInput,
+                cep: endereco.cep || cep
+            };
+
+            if (!isNumeroManual) {
+                updates.numero = endereco.numero || numero;
+            }
+
+            // Atualiza apenas os campos que mudaram
+            if (updates.cidade !== cidade) setCidade(updates.cidade);
+            if (updates.enderecoInput !== enderecoInput) setEnderecoInput(updates.enderecoInput);
+            if (updates.cep !== cep) setCep(updates.cep);
+            if (updates.numero !== undefined && updates.numero !== numero) setNumero(updates.numero);
+
+            // Preenche o bairro se existir no endereço
+            if (endereco.bairro && !localizacao) {
+                setLocalizacao(endereco.bairro);
+            }
+        }
+    }, [endereco, isNumeroManual]);
+
+    const obterLocalizacaoUsuario = async () => {
+        setLocalizacaoError(null);
+        setMostrarMapa(false);
+
+        try {
+            if (!navigator.geolocation) {
+                throw new Error("Geolocalização não suportada pelo navegador");
+            }
+
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0
+                });
+            });
+
+            const { latitude, longitude, accuracy } = position.coords;
             setUserCoords([latitude, longitude]);
+            setUserAccuracy(accuracy);
             setMostrarMapa(true);
 
         } catch (error) {
@@ -124,71 +783,80 @@ function Cadastro() {
                     errorMessage = "Tempo de espera excedido ao obter localização.";
                     break;
             }
-
             setLocalizacaoError(errorMessage);
         }
     };
 
-    // Função para mostrar mapa
+    // Configuração do mapa
     useEffect(() => {
         if (!mostrarMapa || !userCoords) return;
-    
-        // Cria o mapa se não existir
+
+        let newMap;
         if (!mapInstance) {
-            const newMap = L.map('mapa').setView(userCoords, 18);
-            
+            newMap = L.map('mapa', {
+                zoomControl: true,
+                preferCanvas: true
+            }).setView(userCoords, 18);
+
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
             }).addTo(newMap);
-    
-            // Adiciona o círculo azul da localização atual
-            L.circle(userCoords, {
-                color: 'blue',
-                fillColor: '#30f',
-                fillOpacity: 1,
-                radius: 5
-            }).addTo(newMap);
-    
+
+            setTimeout(() => {
+                newMap.invalidateSize();
+            }, 100);
+
             setMapInstance(newMap);
         } else {
-            // Se o mapa já existe, apenas atualiza a view e os marcadores
             mapInstance.setView(userCoords);
-            
-            // Limpa marcadores antigos (exceto o tileLayer)
-            mapInstance.eachLayer(layer => {
-                if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
-                    mapInstance.removeLayer(layer);
-                }
-            });
-    
-            // Adiciona novamente o círculo azul
-            L.circle(userCoords, {
-                color: 'blue',
-                fillColor: '#30f',
-                fillOpacity: 1,
-                radius: 5
-            }).addTo(mapInstance);
+            newMap = mapInstance;
         }
-    
-        // Adiciona postes cadastrados
-        postesCadastrados.forEach((poste, index) => {
-            L.circleMarker(poste.coords, {
-                color: '#808080',
-                fillColor: '#A9A9A9',
-                fillOpacity: 0.8,
-                radius: 4
-            }).addTo(mapInstance)
-                .bindPopup(`Poste #${index + 1}<br>${poste.endereco}`);
+
+        // Limpa marcadores antigos
+        newMap.eachLayer(layer => {
+            if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+                newMap.removeLayer(layer);
+            }
         });
-    
+
+        // Adiciona marcador da localização atual
+        L.circle(userCoords, {
+            color: '#0066ff',
+            fillColor: '#0066ff',
+            fillOpacity: 1,
+            weight: 2,
+            radius: 5,
+        }).addTo(newMap);
+
+        // Adiciona marcadores dos postes cadastrados
+        if (postesCadastrados?.length > 0) {
+            const markers = L.layerGroup();
+
+            postesCadastrados.forEach((poste, index) => {
+                L.circleMarker(poste.coords, {
+                    color: '#808080',
+                    fillColor: '#A9A9A9',
+                    fillOpacity: 0.8,
+                    radius: 6
+                }).addTo(markers)
+                    .bindPopup(`
+                    <b>Poste #${index + 1}</b><br>
+                    ${poste.endereco}<br>
+                    <small>${new Date(poste.data).toLocaleString()}</small>
+                `);
+            });
+
+            markers.addTo(newMap);
+        }
+
         return () => {
-            // Limpeza quando o componente desmontar ou quando mostrarMapa mudar para false
-            if (mapInstance && !mostrarMapa) {
+            if (!mostrarMapa && mapInstance) {
                 mapInstance.remove();
                 setMapInstance(null);
             }
         };
-    }, [mostrarMapa, userCoords, postesCadastrados]);
+    }, [mostrarMapa, userCoords, postesCadastrados, mapInstance]);
 
     const fecharMapa = () => {
         if (mapInstance) {
@@ -196,20 +864,37 @@ function Cadastro() {
             setMapInstance(null);
         }
         setMostrarMapa(false);
-        setUserCoords(null);
     };
 
-    // Função para lidar com a foto panorâmica
-    const handleFotoLuminaria = (fotoURL) => {
-        console.log("Foto da Panorâmica capturada:", fotoURL);
+    // Estado para as fotos 
+    const [fotos, setFotos] = useState([]);
+
+    // Funções para adicionar fotos (atualizadas)
+    const handleFotoLuminaria = (fotoFile) => {
+        setFotos(prev => [...prev, {
+            arquivo: fotoFile,
+            tipo: 'LUMINARIA',
+            coords: userCoords // Usa coordenadas atuais
+        }]);
     };
 
-    // Função para lidar com a foto da árvore
-    const handleFotoArvore = (foto) => {
-        console.log("Foto da Árvore capturada:", foto);
+    const handleFotoArvore = (fotoFile) => {
+        setFotos(prev => [...prev, {
+            arquivo: fotoFile,
+            tipo: 'ARVORE',
+            coords: userCoords // Ou coordenadas específicas da árvore
+        }]);
     };
 
-    // Funções para lidar com a seleção dos ComboBox
+    // Adicione também para foto panorâmica
+    const handleFotoPanoramica = (fotoFile) => {
+        setFotos(prev => [...prev, {
+            arquivo: fotoFile,
+            tipo: 'PANORAMICA',
+            coords: userCoords
+        }]);
+    };
+
     const handleLocalizacaoChange = (value) => {
         setLocalizacao(value);
     };
@@ -314,154 +999,54 @@ function Cadastro() {
         setespecieArvore(value);
     };
 
-    // Função para salvar o cadastro
-   /* const handleSalvarCadastro = async () => {
-        if (!coords || coords.length < 2) {
-            alert("Não foi possível obter coordenadas válidas!");
-            return;
-        }
-
-        const token = localStorage.getItem('token'); // Recupera o token do localStorage
-
-        if (!token) {
-            alert('Usuário não autenticado. Faça login novamente.');
-            return;
-        }
-
-        if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom || !concentrador || !poste
-            || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco || !quantidadePontos || !tipoLampada || !potenciaLampada
-            || !tipoReator || !tipoComando || !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento
-            || !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao
-        ) {
-            alert("Preencha todos os campos obrigatórios!");
-            return;
-        }
-        
-        const formData = ();
-        formData.append('coords', JSON.stringify(coords));
-        formData.append('cidade', cidade);
-            endereco: enderecoInput,
-            numero,
-            cep,
-            isLastPost,
-            localizacao,
-            transformador,
-            medicao,
-            telecom,
-            concentrador,
-            poste,
-            alturaposte,
-            estruturaposte,
-            tipoBraco,
-            tamanhoBraco,
-            quantidadePontos,
-            tipoLampada,
-            potenciaLampada,
-            tipoReator,
-            tipoComando,
-            tipoRede,
-            tipoCabo,
-            numeroFases,
-            tipoVia,
-            hierarquiaVia,
-            tipoPavimento,
-            quantidadeFaixas,
-            tipoPasseio,
-            canteiroCentral,
-            finalidadeInstalacao,
-            especieArvore,
-        };
-
-        try {
-            // Envia os dados para o backend com o token no cabeçalho
-            const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`, // Envia o token no cabeçalho
-
-                },
-            });
-
-            if (response.status === 200 || response.status === 201) {
-                alert("Cadastro salvo com sucesso!");
-                console.log("Resposta do backend:", response.data);
-
-                // Adiciona o novo poste ao estado
-                const novoPoste = {
-                    coords: coords,
-                    endereco: `${enderecoInput}, ${numero} - ${cidade}`,
-                    data: new Date().toLocaleString()
-                };
-                setPostesCadastrados([...postesCadastrados, novoPoste]);
-
-                // Limpa os campos após salvar
-                setCidade("");
-                setEnderecoInput("");
-                setNumero("");
-                setCep("");
-                setLocalizacao("");
-                setTransformador("");
-                setMedicao("");
-                setTelecom("");
-                setConcentrador("");
-                setPoste("");
-                setalturaPoste("");
-                setestruturaPoste("");
-                settipoBraco("");
-                settamanhoBraco("");
-                setquantidadePontos("");
-                settipoLampada("");
-                settipoReator("");
-                settipoComando("");
-                settipoRede("");
-                settipoCabo("");
-                setnumeroFases("");
-                settipoVia("");
-                sethierarquiaVia("");
-                settipoPavimento("");
-                setquantidadeFaixas("");
-                settipoPasseio("");
-                setcanteiroCentral("");
-                setfinalidadeInstalacao("");
-                setespecieArvore("");
-            } else {
-                alert("Erro ao salvar o cadastro. Tente novamente.");
-            }
-        } catch (error) {
-            console.error("Erro ao enviar dados para o backend:", error);
-            alert("Erro ao salvar o cadastro. Verifique sua conexão e tente novamente.");
-        }
-    };*/
 
     const handleSalvarCadastro = async () => {
         if (!coords || coords.length < 2) {
             alert("Não foi possível obter coordenadas válidas!");
             return;
         }
-    
+
         const token = localStorage.getItem('token');
         if (!token) {
             alert('Usuário não autenticado. Faça login novamente.');
             return;
         }
-    
+
         // Verificação de campos obrigatórios
-        if (!cidade || !enderecoInput || !numero || !cep || !transformador || !medicao || !telecom ||
-            !concentrador || !poste || !alturaposte || !estruturaposte || !tipoBraco || !tamanhoBraco ||
-            !quantidadePontos || !tipoLampada || !potenciaLampada || !tipoReator || !tipoComando ||
-            !tipoRede || !tipoCabo || !numeroFases || !tipoVia || !hierarquiaVia || !tipoPavimento ||
-            !quantidadeFaixas || !tipoPasseio || !canteiroCentral || !finalidadeInstalacao) {
-            alert("Preencha todos os campos obrigatórios!");
+        const camposObrigatorios = {
+            cidade, enderecoInput, numero, cep, transformador, medicao, telecom,
+            concentrador, poste, alturaposte, estruturaposte, tipoBraco, tamanhoBraco,
+            quantidadePontos, tipoLampada, potenciaLampada, tipoReator, tipoComando,
+            tipoRede, tipoCabo, numeroFases, tipoVia, hierarquiaVia, tipoPavimento,
+            quantidadeFaixas, tipoPasseio, canteiroCentral, finalidadeInstalacao
+        };
+
+        const camposFaltantes = Object.entries(camposObrigatorios)
+            .filter(([_, value]) => !value)
+            .map(([key]) => key);
+
+        if (camposFaltantes.length > 0) {
+            alert(`Preencha todos os campos obrigatórios! Faltando: ${camposFaltantes.join(', ')}`);
             return;
         }
-    
+
+        // Verificação de fotos obrigatórias
+        const tiposFotos = fotos.map(f => f.tipo);
+        const fotosObrigatoriasFaltando = ['PANORAMICA', 'LUMINARIA']
+            .filter(tipo => !tiposFotos.includes(tipo));
+
+        if (fotosObrigatoriasFaltando.length > 0) {
+            alert(`Fotos obrigatórias faltando: ${fotosObrigatoriasFaltando.join(' e ')}`);
+            return;
+        }
+
+
         try {
             const formData = new FormData();
-            
-            // Adiciona as coordenadas
-            formData.append('coords', JSON.stringify(coords));
-            
+
+
             // Adiciona todos os campos do formulário
+            formData.append('coords', JSON.stringify(coords));
             formData.append('cidade', cidade);
             formData.append('endereco', enderecoInput);
             formData.append('numero', numero);
@@ -493,43 +1078,46 @@ function Cadastro() {
             formData.append('canteiroCentral', canteiroCentral);
             formData.append('finalidadeInstalacao', finalidadeInstalacao);
             formData.append('especieArvore', especieArvore);
-    
-            // Adiciona as fotos se existirem
-            if (fotosSelecionadas) {
-                fotosSelecionadas.forEach(foto => {
-                    formData.append('fotos', foto);
-                });
-            }
-    
-            // Envia os dados para o backend
-            const response = await axios.post('https://apialessandro-production.up.railway.app/api/cadastro', formData, {
+
+            // 2. Adiciona fotos corretamente
+            fotos.forEach((foto) => {
+                formData.append('fotos', foto.arquivo); // Nome do campo deve ser sempre 'fotos'
+                formData.append('tipo_fotos', foto.tipo); // Tipos em maiúsculas
+
+                if (foto.coords) {
+                    formData.append('coords_fotos', JSON.stringify(foto.coords));
+                }
+            });
+
+            // 3.Envia os dados para o backend
+            const response = await axios.post('https://backendalesandro-production.up.railway.app/api/postes', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
                 }
             });
-    
-            if (response.status === 200 || response.status === 201) {
-                alert("Cadastro salvo com sucesso!");
-                
-                // Atualiza o estado local com o novo poste
-                const novoPoste = {
-                    coords: coords,
-                    endereco: `${enderecoInput}, ${numero} - ${cidade}`,
-                    data: new Date().toLocaleString()
-                };
-                setPostesCadastrados([...postesCadastrados, novoPoste]);
-    
-                // Limpa os campos após salvar
+
+            if (response.data.success) {
+
+                // Limpa o formulário
                 setCidade("");
                 setEnderecoInput("");
                 setNumero("");
                 setCep("");
-                // ... (limpar outros campos conforme necessário)
+                setFotos([]);
+
+                // Atualiza a lista de postes
+                await fetchPostesCadastrados();
+
+                alert("Cadastro salvo com sucesso!");
             }
-    
+
+
+
         } catch (error) {
-            console.error("Erro ao salvar:", error);
+            console.error("Erro detalhado:", {
+                error: error.response?.data || error.message
+            });
             alert(`Erro ao salvar: ${error.response?.data?.message || error.message}`);
         }
     };
@@ -632,7 +1220,7 @@ function Cadastro() {
 
                     {/* ComboBox para "Selecione" */}
                     <ComboBox
-                        label="Selecione"
+                        label="Selecione um Item !"
                         options={[
                             { value: "Em Frente", label: "Em Frente" },
                             { value: "Sem Número", label: "Sem Número" },
@@ -666,17 +1254,37 @@ function Cadastro() {
                         </div>
                     )}
 
-                    {/* Mapa */}
+
                     {mostrarMapa && (
-                        <div>
-                            <div id="mapa" style={{ height: '400px', width: '100%', marginTop: '16px' }}></div>
-                            {/* Botão para fechar o mapa */}
-                            <button
-                                onClick={fecharMapa}
-                                className="w-full mt-4 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                            >
-                                Fechar Mapa
-                            </button>
+                        <div className="relative z-50 h-full">
+                            {/* Container do mapa - deve vir primeiro na ordem */}
+                            <div
+                                id="mapa"
+                                className="w-full h-[50vh] min-h-[250px] max-h-[400px] 
+                                        md:h-[55vh] lg:h-[60vh] lg:max-h-[600px]
+                                        mt-3 rounded-lg shadow-sm border border-gray-200
+                                      relative z-0 bg-red"
+                            ></div>
+
+                                    /*{/* Overlay de carregamento - só aparece se não houver mapInstance */}
+                            {!mapInstance && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 z-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                                    <p className="text-gray-700 text-sm">Carregando mapa...</p>
+                                </div>
+                            )}*/
+
+                            {/* Botão de fechar */}
+                            <div className="sticky bottom-4 mt-3 px-4 z-20">
+                                <button
+                                    onClick={fecharMapa}
+                                    className="w-full bg-red-500 hover:bg-red-600 text-white font-medium 
+                    py-3 px-4 rounded-lg shadow-lg transition-colors duration-200
+                    focus:outline-none focus:ring-2 focus:ring-red-500"
+                                >
+                                    Fechar Mapa
+                                </button>
+                            </div>
                         </div>
                     )}
 

@@ -7,48 +7,59 @@ function Login() {
   const senhaRef = useRef(null); // Referência para o campo de senha
   const navigate = useNavigate();
 
-  // Função para lidar com o envio do formulário
   async function handleSubmit(event) {
     event.preventDefault();
-
+  
     const email = emailRef.current?.value;
     const senha = senhaRef.current?.value;
-
-    console.log("Valor de emailRef:", email);
-    console.log("Valor de senhaRef:", senha);
-
-    // Verificando se os campos estão preenchidos
+  
     if (!email || !senha) {
       alert("Por favor, preencha todos os campos.");
       return;
     }
-
+  
     try {
-      // Fazendo a requisição para o backend
-      const { data } = await api.post("/api/login", { email, senha });
-
-      // Verifica se o token foi recebido
-      /* if (data.token) {
-         // Armazena o token no localStorage
-         localStorage.setItem("token", data.token);
-         console.log("Token armazenado:", data.token);*/
-      // Verifica se a resposta é o token puro OU está dentro de .token
-      const receivedToken = typeof data === 'string' ? data : data.token;
-
-      if (receivedToken) {
-        localStorage.setItem("token", receivedToken);
-        console.log("Token armazenado:", receivedToken);
-        navigate("/cadastro");
-
-        // Redireciona para a página de cadastro
-        navigate("/cadastro");
-      } else {
-        console.error("Token não recebido na resposta:", data);
-        alert("Erro ao fazer login. Tente novamente!");
+      // 1. Chamada para a API de login
+      const response = await api.post("/api/login", { 
+        email, 
+        senha 
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+  
+      // 2. Tratamento da resposta
+      if (!response.data.token) {
+        throw new Error("Token não recebido na resposta");
       }
-    } catch (err) {
-      console.error("Erro ao fazer login:", err);
-      alert("Usuário ou senha inválidos!");
+  
+      const token = response.data.token;
+  
+      // 3. Armazenamento do token
+      localStorage.setItem("token", token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      console.log("Login bem-sucedido. Token:", token);
+      
+      // 4. Redirecionamento
+      navigate("/cadastro");
+  
+    } catch (error) {
+      console.error("Erro detalhado:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // Mensagens de erro específicas
+      if (error.response?.status === 401) {
+        alert("Credenciais inválidas!");
+      } else if (error.response?.status === 404) {
+        alert("Endpoint não encontrado. Verifique a URL!");
+      } else {
+        alert(`Erro ao fazer login: ${error.message}`);
+      }
     }
   }
 

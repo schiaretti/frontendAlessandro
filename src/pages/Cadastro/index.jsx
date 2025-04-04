@@ -27,6 +27,20 @@ axios.interceptors.response.use(response => {
 });
 
 function Cadastro() {
+
+    // Obtenha o token e decode para pegar o usuarioId
+    const token = localStorage.getItem('token');
+    const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
+    const usuarioId = decoded?.id;
+
+    // Verificação imediata se não tem usuário
+    if (!usuarioId) {
+        alert('Usuário não autenticado. Redirecionando para login...');
+        // Redirecione para a página de login
+        window.location.href = '/login';
+        return null; // Retorna null para não renderizar o componente
+    }
+
     // Estados de controle
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
@@ -36,8 +50,9 @@ function Cadastro() {
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [postesCadastrados, setPostesCadastrados] = useState([]);
     const [mapInstance, setMapInstance] = useState(null);
-    const [fotosSelecionadas, setFotosSelecionadas] = useState([]);
     const [userAccuracy, setUserAccuracy] = useState(10);
+
+
 
     // Estados do formulário
     const [cidade, setCidade] = useState("");
@@ -72,8 +87,8 @@ function Cadastro() {
     const [canteiroCentral, setcanteiroCentral] = useState("");
     const [finalidadeInstalacao, setfinalidadeInstalacao] = useState("");
     const [especieArvore, setespecieArvore] = useState("");
-
-    const { coords, endereco, error: locationError, isLoading: isLoadingLocation } = useGetLocation(isLastPost || isFirstPostRegistered);
+    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+    const { coords, endereco, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
 
     // Função para buscar postes cadastrados
     const fetchPostesCadastrados = async () => {
@@ -129,12 +144,14 @@ function Cadastro() {
     const obterLocalizacaoUsuario = async () => {
         setLocalizacaoError(null);
         setMostrarMapa(false);
+        setIsLoadingLocation(true); // Adicione este estado se não existir
 
         try {
             if (!navigator.geolocation) {
                 throw new Error("Geolocalização não suportada pelo navegador");
             }
 
+            // 1. Obter localização do usuário
             const position = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
                     enableHighAccuracy: true,
@@ -144,8 +161,18 @@ function Cadastro() {
             });
 
             const { latitude, longitude, accuracy } = position.coords;
-            setUserCoords([latitude, longitude]);
+            const newCoords = [latitude, longitude];
+
+            // 2. Atualizar estados
+            setUserCoords(newCoords);
             setUserAccuracy(accuracy);
+
+            // 3. Carregar postes próximos (se necessário)
+            if (!postesCadastrados || postesCadastrados.length === 0) {
+                await carregarPostesProximos(newCoords); // Implemente esta função
+            }
+
+            // 4. Só mostrar o mapa após tudo estar carregado
             setMostrarMapa(true);
 
         } catch (error) {
@@ -164,70 +191,117 @@ function Cadastro() {
                     break;
             }
             setLocalizacaoError(errorMessage);
+        } finally {
+            setIsLoadingLocation(false);
         }
     };
 
-    // Configuração do mapa
-    useEffect(() => {
-        if (!mostrarMapa || !userCoords) return;
-
-        let newMap;
-        if (!mapInstance) {
-            newMap = L.map('mapa', {
-                zoomControl: true,
-                preferCanvas: true
-            }).setView(userCoords, 18);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(newMap);
-
-            setTimeout(() => {
-                newMap.invalidateSize();
-            }, 100);
-
-            setMapInstance(newMap);
-        } else {
-            mapInstance.setView(userCoords);
-            newMap = mapInstance;
+    // Função de exemplo para carregar postes próximos
+    const carregarPostesProximos = async (coords) => {
+        try {
+            const response = await fetch(`/api/postes/proximos?lat=${coords[0]}&lng=${coords[1]}`);
+            const data = await response.json();
+            setPostesCadastrados(data);
+        } catch (error) {
+            console.error("Erro ao carregar postes:", error);
+            setPostesCadastrados([]);
         }
+    };
 
-        // Limpa marcadores antigos
-        newMap.eachLayer(layer => {
-            if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
-                newMap.removeLayer(layer);
+    //carregar mapa
+    useEffect(() => {
+        if (!mostrarMapa || !userCoords || isLoadingLocation) return;
+
+        // 1. Inicialização do mapa
+        const initMap = () => {
+            if (!mapInstance) {
+                const newMap = L.map('mapa', {
+                    zoomControl: true,
+                    preferCanvas: true
+                }).setView(userCoords, 18);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(newMap);
+
+                setTimeout(() => newMap.invalidateSize(), 100);
+                setMapInstance(newMap);
+                return newMap;
+            }
+            mapInstance.setView(userCoords);
+            return mapInstance;
+        };
+
+        const currentMap = initMap();
+
+        // 2. Limpeza seletiva - mantemos o mapa base e tileLayer
+        currentMap.eachLayer(layer => {
+            if (layer instanceof L.CircleMarker ||
+                (layer instanceof L.LayerGroup && layer !== markersGroupRef.current)) {
+                currentMap.removeLayer(layer);
             }
         });
 
-        // Adiciona marcador da localização atual
-        L.circle(userCoords, {
+        // 3. Referências para os marcadores
+        const markersGroupRef = { current: null };
+        const userMarkerRef = { current: null };
+
+        // 4. Marcador azul (sua localização)
+        userMarkerRef.current = L.circleMarker(userCoords, {
             color: '#0066ff',
             fillColor: '#0066ff',
             fillOpacity: 1,
-            weight: 2,
-            radius: 5,
-        }).addTo(newMap);
+            radius: 5
+        }).addTo(currentMap).bindPopup('Sua localização atual');
 
-        // Adiciona marcadores dos postes cadastrados
+        // 5. Processamento dos postes cadastrados
         if (postesCadastrados?.length > 0) {
-            const markers = L.layerGroup();
+            console.log('Dados dos postes para renderizar:', postesCadastrados);
+
+            markersGroupRef.current = L.layerGroup();
+            const validBounds = L.latLngBounds([userCoords]);
 
             postesCadastrados.forEach((poste, index) => {
-                L.circleMarker(poste.coords, {
-                    color: '#808080',
-                    fillColor: '#A9A9A9',
+                if (!poste.coords || !Array.isArray(poste.coords)) {
+                    console.error(`Poste ${index} ignorado - coordenadas inválidas:`, poste.coords);
+                    return;
+                }
+
+                const coords = [
+                    Number(poste.coords[0]),
+                    Number(poste.coords[1])
+                ];
+
+                if (coords.some(isNaN)) {  // <-- ERRO AQUI (parêntese extra)
+                    console.error(`Poste ${index} ignorado - coordenadas não numéricas:`, poste.coords);
+                    return;
+                }
+
+                // Cria o marcador vermelho
+                L.circleMarker(coords, {
+                    color: '#ff0000',
+                    fillColor: '#ff0000',
                     fillOpacity: 0.8,
-                    radius: 6
-                }).addTo(markers)
+                    radius: 10
+                }).addTo(markersGroupRef.current)
                     .bindPopup(`
                     <b>Poste #${index + 1}</b><br>
-                    ${poste.endereco}<br>
-                    <small>${new Date(poste.data).toLocaleString()}</small>
+                    ${poste.endereco || 'Endereço não disponível'}<br>
+                    <small>Cidade: ${poste.cidade || 'Não informada'}</small>
                 `);
+
+                validBounds.extend(coords);
             });
 
-            markers.addTo(newMap);
+            markersGroupRef.current.addTo(currentMap);
+
+            requestAnimationFrame(() => {
+                if (validBounds.isValid() && !validBounds.getCenter().equals([0, 0])) {
+                    currentMap.fitBounds(validBounds.pad(0.2));
+                }
+                currentMap.invalidateSize();
+            });
         }
 
         return () => {
@@ -236,8 +310,9 @@ function Cadastro() {
                 setMapInstance(null);
             }
         };
-    }, [mostrarMapa, userCoords, postesCadastrados, mapInstance]);
+    }, [mostrarMapa, userCoords, postesCadastrados, isLoadingLocation]);
 
+    // Função para fechar o mapa (definida fora do useEffect)
     const fecharMapa = () => {
         if (mapInstance) {
             mapInstance.remove();
@@ -246,34 +321,64 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
-    // Estado para as fotos 
+    // Estado para as fotos (mantém a mesma declaração)
     const [fotos, setFotos] = useState([]);
 
-    // Funções para adicionar fotos (atualizadas)
-    const handleFotoLuminaria = (fotoFile) => {
-        setFotos(prev => [...prev, {
-            arquivo: fotoFile,
-            tipo: 'LUMINARIA',
-            coords: userCoords // Usa coordenadas atuais
-        }]);
+    // Função genérica para adicionar qualquer tipo de foto
+    const adicionarFoto = (tipo, fotoFile) => {
+        if (!fotoFile) {
+            console.error('Nenhum arquivo recebido para:', tipo);
+            return;
+        }
+
+        // Verificação robusta do tipo de arquivo
+        if (!(fotoFile instanceof File)) {
+            console.error('Tipo de arquivo inválido para:', tipo, fotoFile);
+            alert(`O arquivo para ${tipo} não é válido`);
+            return;
+        }
+
+        // Verifica tamanho máximo (5MB como exemplo)
+        if (fotoFile.size > 5 * 1024 * 1024) {
+            alert('A foto é muito grande (máximo 5MB)');
+            return;
+        }
+
+        console.log(`Foto ${tipo} recebida:`, fotoFile.name, (fotoFile.size / 1024).toFixed(2), 'KB');
+
+        setFotos(prev => [
+            ...prev.filter(f => f.tipo !== tipo), // Remove duplicatas
+            {
+                arquivo: fotoFile,
+                tipo: tipo.toUpperCase(),
+                coords: userCoords,
+                id: `${tipo}-${Date.now()}` // ID único
+            }
+        ]);
     };
 
-    const handleFotoArvore = (fotoFile) => {
-        setFotos(prev => [...prev, {
-            arquivo: fotoFile,
-            tipo: 'ARVORE',
-            coords: userCoords // Ou coordenadas específicas da árvore
-        }]);
+    // Handlers específicos para cada tipo de foto
+    const handleFotoPanoramica = (fotoFile) => adicionarFoto('PANORAMICA', fotoFile);
+    const handleFotoLuminaria = (fotoFile) => adicionarFoto('LUMINARIA', fotoFile);
+    const handleFotoArvore = (fotoFile) => adicionarFoto('ARVORE', fotoFile);
+
+    // Verificação melhorada das fotos obrigatórias
+    const verificarFotos = () => {
+        const obrigatorias = ['PANORAMICA', 'LUMINARIA'];
+        const fotosValidas = fotos.filter(f => f.arquivo instanceof File);
+
+        const faltantes = obrigatorias.filter(tipo =>
+            !fotosValidas.some(f => f.tipo === tipo)
+        );
+
+        if (faltantes.length > 0) {
+            alert(`Fotos obrigatórias faltando: ${faltantes.join(', ')}\nPor favor, tire novas fotos.`);
+            return false;
+        }
+
+        return true;
     };
 
-    // Adicione também para foto panorâmica
-    const handleFotoPanoramica = (fotoFile) => {
-        setFotos(prev => [...prev, {
-            arquivo: fotoFile,
-            tipo: 'PANORAMICA',
-            coords: userCoords
-        }]);
-    };
 
     const handleLocalizacaoChange = (value) => {
         setLocalizacao(value);
@@ -381,18 +486,27 @@ function Cadastro() {
 
 
     const handleSalvarCadastro = async () => {
+
+        // Verificação reforçada
+        if (!usuarioId) {
+            alert('ID do usuário não disponível. Faça login novamente.');
+            localStorage.removeItem('token'); // Limpa o token inválido
+            window.location.href = '/login';
+            return;
+        }
+
+        if (!token) {
+            alert('Sessão expirada. Faça login novamente.');
+            return;
+        }
+
+
         if (!coords || coords.length < 2) {
             alert("Não foi possível obter coordenadas válidas!");
             return;
         }
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('Usuário não autenticado. Faça login novamente.');
-            return;
-        }
-
-        // Verificação de campos obrigatórios
+        // Verificação de campos obrigatórios primeiro
         const camposObrigatorios = {
             cidade, enderecoInput, numero, cep, transformador, medicao, telecom,
             concentrador, poste, alturaposte, estruturaposte, tipoBraco, tamanhoBraco,
@@ -410,28 +524,41 @@ function Cadastro() {
             return;
         }
 
-        // Verificação de fotos obrigatórias
-        const tiposFotos = fotos.map(f => f.tipo);
-        const fotosObrigatoriasFaltando = ['PANORAMICA', 'LUMINARIA']
-            .filter(tipo => !tiposFotos.includes(tipo));
-
-        if (fotosObrigatoriasFaltando.length > 0) {
-            alert(`Fotos obrigatórias faltando: ${fotosObrigatoriasFaltando.join(' e ')}`);
+        // Verificação das fotos obrigatórias
+        if (!verificarFotos()) {
             return;
         }
 
 
         try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Usuário não autenticado. Faça login novamente.');
+                return;
+            }
+
             const formData = new FormData();
 
-
-            // Adiciona todos os campos do formulário
+            // 1.Adiciona campos do formulário
             formData.append('coords', JSON.stringify(coords));
             formData.append('cidade', cidade);
             formData.append('endereco', enderecoInput);
             formData.append('numero', numero);
             formData.append('cep', cep);
-            formData.append('isLastPost', isLastPost);
+            formData.append('usuarioId', String(usuarioId));
+
+            // 2. Adiciona tipos das fotos ANTES dos arquivos
+            //formData.append('tipo_fotos[]', 'PANORAMICA');
+            //formData.append('tipo_fotos[]', 'LUMINARIA');
+
+            // 3. Adiciona fotos com correspondência 1:1 com os tipos
+            fotos.forEach((foto, index) => {
+                formData.append('fotos', foto.arquivo);
+                formData.append(`tipo_fotos[${index}]`, foto.tipo);
+            });
+
+            // 4. Adiciona demais campos opcionais
+            formData.append('isLastPost', isLastPost.toString());
             formData.append('localizacao', localizacao);
             formData.append('transformador', transformador);
             formData.append('medicao', medicao);
@@ -459,26 +586,30 @@ function Cadastro() {
             formData.append('finalidadeInstalacao', finalidadeInstalacao);
             formData.append('especieArvore', especieArvore);
 
-            // 2. Adiciona fotos corretamente
-            fotos.forEach((foto) => {
-                formData.append('fotos', foto.arquivo); // Nome do campo deve ser sempre 'fotos'
-                formData.append('tipo_fotos', foto.tipo); // Tipos em maiúsculas
+            // Debug do FormData
+            console.log('Conteúdo do FormData:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key, value instanceof File ?
+                    `FILE: ${value.name}` :
+                    `VALUE: ${value}`
+                );
+            }
 
-                if (foto.coords) {
-                    formData.append('coords_fotos', JSON.stringify(foto.coords));
-                }
-            });
-
-            // 3.Envia os dados para o backend
+            // 5. Envio com axios
             const response = await axios.post('https://backendalesandro-production.up.railway.app/api/postes', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
-                }
+                },
+                timeout: 10000 // 10 segundos de timeout
             });
 
-            if (response.data.success) {
+            /* if (response.data.success) {
+                 alert('Poste cadastrado com sucesso!');
+                 // Limpeza do formulário...
+             }*/
 
+            if (response.data.success) {
                 // Limpa o formulário
                 setCidade("");
                 setEnderecoInput("");
@@ -486,21 +617,28 @@ function Cadastro() {
                 setCep("");
                 setFotos([]);
 
-                // Atualiza a lista de postes
                 await fetchPostesCadastrados();
-
                 alert("Cadastro salvo com sucesso!");
             }
-
-
-
         } catch (error) {
-            console.error("Erro detalhado:", {
-                error: error.response?.data || error.message
+            console.error("Erro completo:", {
+                config: error.config,
+                response: error.response?.data,
+                message: error.message
             });
-            alert(`Erro ao salvar: ${error.response?.data?.message || error.message}`);
-        }
-    };
+
+            if (error.response?.status === 401) {
+                alert('Sessão expirada. Faça login novamente.');
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            } else {
+                console.error("Erro completo:", error);
+                alert(error.response?.data?.message || 'Erro ao cadastrar.');
+            }
+            alert(error.response?.data?.message ||
+                'Erro ao cadastrar. Verifique os dados e tente novamente.');
+        };
+    }
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
@@ -619,7 +757,16 @@ function Cadastro() {
                         className="w-full mt-4 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
                         disabled={isLoadingLocation} // Desabilita durante o carregamento
                     >
-                        {isLoadingLocation ? 'Obtendo localização...' : 'Carregar Mapa com Minha Localização'}
+                        {isLoadingLocation ? (
+                            <span className="flex items-center justify-center">
+                                <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                                    {/* Ícone de loading */}
+                                </svg>
+                                Carregando...
+                            </span>
+                        ) : (
+                            'Carregar Mapa com Minha Localização'
+                        )}
                     </button>
 
                     {localizacaoError && (
@@ -637,37 +784,36 @@ function Cadastro() {
 
                     {mostrarMapa && (
                         <div className="relative z-50 h-full">
-                            {/* Container do mapa - deve vir primeiro na ordem */}
+                            {/* Container do mapa */}
                             <div
                                 id="mapa"
                                 className="w-full h-[50vh] min-h-[250px] max-h-[400px] 
-                                        md:h-[55vh] lg:h-[60vh] lg:max-h-[600px]
-                                        mt-3 rounded-lg shadow-sm border border-gray-200
-                                      relative z-0 bg-red"
+                    md:h-[55vh] lg:h-[60vh] lg:max-h-[600px]
+                    mt-3 rounded-lg shadow-sm border border-gray-200
+                    relative z-0"
                             ></div>
 
-                                    /*{/* Overlay de carregamento - só aparece se não houver mapInstance */}
+                            {/* Overlay de carregamento */}
                             {!mapInstance && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 z-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mb-2"></div>
                                     <p className="text-gray-700 text-sm">Carregando mapa...</p>
                                 </div>
-                            )}*/
+                            )}
 
                             {/* Botão de fechar */}
                             <div className="sticky bottom-4 mt-3 px-4 z-20">
                                 <button
                                     onClick={fecharMapa}
                                     className="w-full bg-red-500 hover:bg-red-600 text-white font-medium 
-                    py-3 px-4 rounded-lg shadow-lg transition-colors duration-200
-                    focus:outline-none focus:ring-2 focus:ring-red-500"
+                py-3 px-4 rounded-lg shadow-lg transition-colors duration-200
+                focus:outline-none focus:ring-2 focus:ring-red-500"
                                 >
                                     Fechar Mapa
                                 </button>
                             </div>
                         </div>
                     )}
-
 
 
                     {/* Seção de captura de fotos */}
@@ -679,7 +825,7 @@ function Cadastro() {
                         {/* Componente para foto panorâmica */}
                         <BotaoCamera
                             label="Foto Panorâmica *"
-                            onFotoCapturada={handleFotoLuminaria}
+                            onFotoCapturada={handleFotoPanoramica}
                         />
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />

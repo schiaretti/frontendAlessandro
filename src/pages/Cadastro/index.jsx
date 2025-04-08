@@ -352,34 +352,38 @@ function Cadastro() {
     const [previews, setPreviews] = useState({});
     const [estaCapturando, setEstaCapturando] = useState(null);
 
-    // Função para capturar foto usando a câmera do celular
-    const capturarFoto = (tipo) => () => {
+    const capturarFoto = (tipo) => async () => {
         setEstaCapturando(tipo);
 
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.capture = 'environment';
+        input.capture = 'environment'; // Força câmera traseira
 
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) {
                 setEstaCapturando(null);
                 return;
             }
 
+            // Verificação do tipo de arquivo
             if (!file.type.match('image.*')) {
                 alert('Por favor, selecione uma imagem válida!');
                 setEstaCapturando(null);
                 return;
             }
 
-          
+            try {
+                // Criar preview antes de atualizar o estado
+                const previewURL = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => resolve(event.target.result);
+                    reader.readAsDataURL(file);
+                });
 
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                setPreviews(prev => ({ ...prev, [tipo]: event.target.result }));
-
+                // Atualiza os estados de uma só vez
+                setPreviews(prev => ({ ...prev, [tipo]: previewURL }));
                 setFotos(prev => ({
                     ...prev,
                     [tipo]: {
@@ -389,10 +393,12 @@ function Cadastro() {
                         id: `${tipo}-${Date.now()}`
                     }
                 }));
-
+            } catch (error) {
+                console.error("Erro ao processar imagem:", error);
+                alert("Erro ao processar a foto");
+            } finally {
                 setEstaCapturando(null);
-            };
-            reader.readAsDataURL(file);
+            }
         };
 
         input.click();
@@ -431,7 +437,12 @@ function Cadastro() {
                         src={previews[tipo]}
                         alt={`Preview ${tipo}`}
                         className="mb-2 max-h-40 rounded border"
+                        onError={(e) => {
+                            e.currentTarget.src = ''; // Limpa se der erro
+                            removerFoto(tipo);
+                        }}
                     />
+                    
                     <div className="flex gap-2 w-full">
                         <button
                             type="button"

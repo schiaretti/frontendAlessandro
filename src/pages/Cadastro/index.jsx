@@ -354,45 +354,46 @@ function Cadastro() {
 
     const capturarFoto = (tipo) => async () => {
         setEstaCapturando(tipo);
-
+    
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.capture = 'environment'; // Força câmera traseira
-
+        input.capture = 'environment';
+    
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) {
                 setEstaCapturando(null);
                 return;
             }
-
-            // Verificação do tipo de arquivo
+    
             if (!file.type.match('image.*')) {
                 alert('Por favor, selecione uma imagem válida!');
                 setEstaCapturando(null);
                 return;
             }
-
+    
             try {
-                // Criar preview antes de atualizar o estado
-                const previewURL = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (event) => resolve(event.target.result);
-                    reader.readAsDataURL(file);
-                });
-
-                // Atualiza os estados de uma só vez
-                setPreviews(prev => ({ ...prev, [tipo]: previewURL }));
+                // Cria a URL do preview
+                const previewURL = URL.createObjectURL(file);
+                
+                // Atualiza os estados de forma consistente
+                setPreviews(prev => ({ 
+                    ...prev, 
+                    [tipo]: previewURL 
+                }));
+                
                 setFotos(prev => ({
                     ...prev,
                     [tipo]: {
                         arquivo: file,
                         tipo: tipo,
                         coords: userCoords,
-                        id: `${tipo}-${Date.now()}`
+                        id: `${tipo}-${Date.now()}`,
+                        previewURL: previewURL // Adiciona a URL ao objeto de foto
                     }
                 }));
+    
             } catch (error) {
                 console.error("Erro ao processar imagem:", error);
                 alert("Erro ao processar a foto");
@@ -400,16 +401,19 @@ function Cadastro() {
                 setEstaCapturando(null);
             }
         };
-
+    
         input.click();
     };
 
-    // Função para remover foto
     const removerFoto = (tipo) => {
+        // Libera a URL do objeto se existir
+        if (fotos[tipo]?.previewURL) {
+            URL.revokeObjectURL(fotos[tipo].previewURL);
+        }
+        
         setFotos(prev => ({ ...prev, [tipo]: null }));
         setPreviews(prev => ({ ...prev, [tipo]: null }));
     };
-
     const verificarFotos = () => {
         if (!fotos.PANORAMICA || !fotos.LUMINARIA) {
             alert("Fotos obrigatórias faltando: PANORAMICA e LUMINARIA");
@@ -430,23 +434,22 @@ function Cadastro() {
                     </span>
                 )}
             </label>
-
+    
             {previews[tipo] ? (
                 <div className="flex flex-col items-start">
                     <img
                         src={previews[tipo]}
                         alt={`Preview ${tipo}`}
-                        className="mb-2 max-h-40 rounded border"
+                        className="mb-2 max-h-40 rounded border object-cover w-full"
                         onError={(e) => {
-                            e.currentTarget.src = ''; // Limpa se der erro
+                            e.currentTarget.src = '';
                             removerFoto(tipo);
                         }}
                     />
-                    
                     <div className="flex gap-2 w-full">
                         <button
                             type="button"
-                            onClick={() => capturarFoto(tipo)()}
+                            onClick={capturarFoto(tipo)}
                             className="flex-1 bg-blue-500 text-white px-3 py-1 rounded text-sm flex items-center justify-center gap-1"
                         >
                             <FaCamera className="inline" />
@@ -467,10 +470,11 @@ function Cadastro() {
                     type="button"
                     onClick={capturarFoto(tipo)}
                     disabled={estaCapturando === tipo}
-                    className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 ${estaCapturando === tipo ?
-                        'bg-gray-400' :
-                        'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
+                    className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 ${
+                        estaCapturando === tipo 
+                        ? 'bg-gray-400' 
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
                 >
                     {estaCapturando === tipo ? (
                         <FaSpinner className="animate-spin" />

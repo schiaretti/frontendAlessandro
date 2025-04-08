@@ -65,7 +65,7 @@ const BotaoCamera = ({ label, onFotoCapturada }) => {
 
   const salvarFoto = () => {
     setSalvo(true);
-    alert("Foto pronta para envio!");
+    //alert("Foto pronta para envio!");
   };
 
   const cancelarFoto = () => {

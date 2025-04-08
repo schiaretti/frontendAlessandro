@@ -5,13 +5,22 @@ const api = axios.create({
 
 });
 
-// Adiciona o token automaticamente a cada requisição
-api.interceptors.request.use(config => {
-   const token = localStorage.getItem('token');
-   if (token) {
-     config.headers.Authorization = `Bearer ${token}`;
-   }
-   return config;
- });
+// Adicione no arquivo onde configura o Axios
+axios.interceptors.request.use(config => {
+  console.log('Enviando requisição para:', config.url);
+  return config;
+});
+
+axios.interceptors.response.use(response => {
+  console.log('Resposta recebida:', response.status, response.data);
+  return response;
+}, error => {
+  console.error('Erro na requisição:', {
+      url: error.config.url,
+      status: error.response?.status,
+      data: error.response?.data
+  });
+  return Promise.reject(error);
+});
 
 export default api 

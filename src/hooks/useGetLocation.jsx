@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+/*import { useEffect, useState } from "react";
 
 function useGetLocation(isLastPost) {
   const [coords, setCoords] = useState(null);
@@ -32,7 +32,60 @@ function useGetLocation(isLastPost) {
 
       return () => navigator.geolocation.clearWatch(watchId);
     }
-  }, [isLastPost]);
+  }, [isLastPost]);*/
+  import { useEffect, useState, useRef } from "react";
+
+  function useGetLocation(isLastPost) {
+    const [coords, setCoords] = useState(null);
+    const [endereco, setEndereco] = useState(null);
+    const [accuracy, setAccuracy] = useState(null);
+    const [error, setError] = useState(null);
+    const watchIdRef = useRef(null);
+  
+    useEffect(() => {
+      if (isLastPost) {
+        const mockCoords = [-23.5505, -46.6333];
+        setCoords(mockCoords);
+        buscarEndereco(mockCoords[0], mockCoords[1]);
+        return;
+      }
+  
+      if (!navigator.geolocation) {
+        setError("Geolocalização não suportada pelo navegador.");
+        return;
+      }
+  
+      const options = {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      };
+  
+      // Limpa watch anterior se existir
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+  
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setCoords([latitude, longitude]);
+          setAccuracy(accuracy);
+          buscarEndereco(latitude, longitude);
+        },
+        (err) => {
+          setError(err.message);
+          console.error("Erro ao obter localização:", err);
+        },
+        options
+      );
+  
+      return () => {
+        if (watchIdRef.current) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+      };
+    }, [isLastPost]);  
 
   // Função para buscar o endereço com base nas coordenadas
   const buscarEndereco = async (lat, lon) => {
@@ -69,7 +122,8 @@ function useGetLocation(isLastPost) {
     }
   };
 
-  return { coords, endereco };
+  return { coords, endereco, accuracy, error };
+  
 }
 
 export default useGetLocation;

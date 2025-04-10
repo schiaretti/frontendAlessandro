@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+/*import React, { useRef, useState } from "react";
 import { FaCamera, FaSave, FaTimes } from "react-icons/fa";
 
 const BotaoArvore = ({ label, onFotoCapturada }) => {
@@ -125,21 +125,21 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
 
   return (
     <div className="mb-8">
-      {/* Botão para abrir a câmera */}
-      {!cameraAberta && !fotoCapturada && (
-        <div className="flex justify-between items-center">
-          <span className="text-gray-700">{label}</span> {/* Label à esquerda */}
-          <button
+      {/* Botão para abrir a câmera */
+     /* {!cameraAberta && !fotoCapturada && (
+        /*<div className="flex justify-between items-center">
+          <span className="text-gray-700">{label}</span> {/* Label à esquerda */
+          /*<button
             onClick={handleAbrirCamera}
             className="flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <FaCamera className="text-lg" /> {/* Ícone de câmera */}
-          </button>
-        </div>
+            <FaCamera className="text-lg" /> {/* Ícone de câmera */
+         // </button>
+       /* </div>
       )}
 
-      {/* Elemento para exibir o vídeo da câmera */}
-      {cameraAberta && (
+      {/* Elemento para exibir o vídeo da câmera */
+     /* {cameraAberta && (
         <div>
           <video
             ref={videoRef}
@@ -148,8 +148,8 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
             className="block mt-4 border border-gray-300 rounded-md"
             muted // Adiciona o atributo muted para evitar problemas de autoplay
           />
-          {/* Botão para capturar a foto */}
-          <button
+          {/* Botão para capturar a foto */
+         /* <button
             onClick={capturarFoto}
             disabled={botaoDesabilitado} // Desabilita o botão após a captura
             className={`mt-4 flex items-center justify-center bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 ${
@@ -161,16 +161,16 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
         </div>
       )}
 
-      {/* Exibe a foto capturada em tamanho reduzido */}
-      {fotoCapturada && (
+      {/* Exibe a foto capturada em tamanho reduzido */
+     /* {fotoCapturada && (
         <div className="mt-4 text-center">
           <img
             src={fotoCapturada}
             alt="Foto capturada"
             className="w-1/4 mx-auto border border-gray-300 rounded-md"
           />
-          {/* Botões Salvar e Cancelar */}
-          <div className="mt-4 flex justify-center gap-20">
+          {/* Botões Salvar e Cancelar */
+        /*  <div className="mt-4 flex justify-center gap-20">
             <button
               onClick={salvarFoto}
               className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -187,8 +187,8 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
         </div>
       )}
 
-      {/* Exibe as fotos salvas lado a lado */}
-      {fotosSalvas.length > 0 && (
+      {/* Exibe as fotos salvas lado a lado */
+    /*  {fotosSalvas.length > 0 && (
         <div className="mt-6">
           <h3 className="text-lg font-bold mb-4">Fotos Salvas</h3>
           <div className="flex flex-wrap gap-4">
@@ -206,8 +206,8 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
         </div>
       )}
 
-      {/* Botão para tirar uma nova foto */}
-      {fotosSalvas.length > 0 && (
+      {/* Botão para tirar uma nova foto */
+    /*  {fotosSalvas.length > 0 && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={handleAbrirCamera}
@@ -221,4 +221,5 @@ const BotaoArvore = ({ label, onFotoCapturada }) => {
   );
 };
 
-export default BotaoArvore;
+export default BotaoArvore;*/
+

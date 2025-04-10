@@ -70,263 +70,236 @@ function Cadastro() {
     const [finalidadeInstalacao, setfinalidadeInstalacao] = useState("");
     const [especieArvore, setespecieArvore] = useState("");
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-    const { coords, endereco, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
-
-    const fetchPostesCadastrados = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-
-            // Processamento seguro das coordenadas
-            const postesProcessados = response.data.data.map(poste => {
-                // Verifica se já vem no formato [lat, lng] ou se precisa combinar
-                const coords = poste.coords ||
-                    (poste.latitude && poste.longitude ?
-                        [poste.latitude, poste.longitude] :
-                        null);
-
-                return {
-                    ...poste,
-                    coords: coords ? coords.map(Number) : null // Garante que são números
-                };
-            });
-
-            return postesProcessados.filter(poste =>
-                poste.coords &&
-                !isNaN(poste.coords[0]) &&
-                !isNaN(poste.coords[1])
-            );
-
-        } catch (error) {
-            console.error("Erro ao buscar postes:", {
-                status: error.response?.status,
-                data: error.response?.data,
-                message: error.message
-            });
-
-            // Fallback para não quebrar a aplicação
-            return [];
-        }
-    };
-
-    // Preenche os campos automaticamente quando o endereço é obtido
+    const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
+       
+    // Atualiza as coordenadas do usuário quando o hook retorna novas coordenadas
     useEffect(() => {
-        if (endereco) {
-            const updates = {
-                cidade: endereco.cidade || cidade,
-                enderecoInput: endereco.rua || enderecoInput,
-                cep: endereco.cep || cep
-            };
-
-            if (!isNumeroManual) {
-                updates.numero = endereco.numero || numero;
-            }
-
-            // Atualiza apenas os campos que mudaram
-            if (updates.cidade !== cidade) setCidade(updates.cidade);
-            if (updates.enderecoInput !== enderecoInput) setEnderecoInput(updates.enderecoInput);
-            if (updates.cep !== cep) setCep(updates.cep);
-            if (updates.numero !== undefined && updates.numero !== numero) setNumero(updates.numero);
-
-            // Preenche o bairro se existir no endereço
-            if (endereco.bairro && !localizacao) {
-                setLocalizacao(endereco.bairro);
-            }
-        }
-    }, [endereco, isNumeroManual]);
-
-    const obterLocalizacaoUsuario = async () => {
-        setLocalizacaoError(null);
-        setIsLoadingLocation(true);
-        setMostrarMapa(false); // Garante que o mapa só mostra quando tudo estiver pronto
-
-        try {
-            // 1. Verifica suporte a geolocalização
-            if (!navigator.geolocation) {
-                throw new Error("Geolocalização não suportada pelo navegador");
-            }
-
-            // 2. Obtém a posição do usuário
-            const position = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(
-                    resolve,
-                    reject,
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 15000, // 15 segundos
-                        maximumAge: 0
-                    }
-                );
-            });
-
-            const { latitude, longitude, accuracy } = position.coords;
-            const newCoords = [latitude, longitude];
-
-            // 3. Atualiza os estados
-            setUserCoords(newCoords);
-            setUserAccuracy(accuracy);
-
-            // 4. Carrega os postes (com fallback)
-            try {
-                await fetchPostesCadastrados();
-            } catch (error) {
-                console.warn("Erro ao carregar postes, continuando sem eles", error);
-                // Continua mesmo sem os postes, mas com a localização do usuário
-            }
-
-            // 5. Mostra o mapa após tudo carregar
-            setMostrarMapa(true);
-
-        } catch (error) {
-            console.error("Falha na obtenção de localização:", error);
-
-            let errorMessage = "Não foi possível obter localização precisa.";
-            if (error.code === error.PERMISSION_DENIED) {
-                errorMessage = "Permissão de localização negada. Por favor, habilite no navegador.";
-            } else if (error.code === error.POSITION_UNAVAILABLE) {
-                errorMessage = "Localização indisponível. Verifique sua conexão ou GPS.";
-            } else if (error.code === error.TIMEOUT) {
-                errorMessage = "Tempo de espera excedido. Tente novamente em área aberta.";
-            } else if (error.message.includes('token')) {
-                errorMessage = "Sessão expirada. Redirecionando para login...";
-                localStorage.removeItem('token');
-                setTimeout(() => window.location.href = '/login', 2000);
-            }
-
-            setLocalizacaoError(errorMessage);
-
-            // Fallback: usa localização padrão se disponível
-            if (!userCoords) {
-                setUserCoords([-23.5505, -46.6333]); // Ex: São Paulo como fallback
-                setMostrarMapa(true);
-            }
-        } finally {
-            setIsLoadingLocation(false);
-        }
-    };
-
-    //carregar mapa
-    useEffect(() => {
-        if (!mostrarMapa || !userCoords || isLoadingLocation) return;
-
-        // 1. Inicialização do mapa
-        const initMap = () => {
-            if (!mapInstance) {
-                const newMap = L.map('mapa', {
-                    zoomControl: true,
-                    preferCanvas: true
-                }).setView(userCoords, 18);
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
-                    maxZoom: 19
-                }).addTo(newMap);
-
-                setTimeout(() => newMap.invalidateSize(), 100);
-                setMapInstance(newMap);
-                return newMap;
-            }
-            mapInstance.setView(userCoords);
-            return mapInstance;
-        };
-
-        const currentMap = initMap();
-
-        // 2. Limpeza seletiva - mantemos o mapa base e tileLayer
-        currentMap.eachLayer(layer => {
-            if (layer instanceof L.CircleMarker ||
-                (layer instanceof L.LayerGroup && layer !== markersGroupRef.current)) {
-                currentMap.removeLayer(layer);
-            }
-        });
-
-        // 3. Referências para os marcadores
-        const markersGroupRef = { current: null };
-        const userMarkerRef = { current: null };
-
-        // 4. Marcador azul (sua localização)
-        userMarkerRef.current = L.circleMarker(userCoords, {
-            color: '#0066ff',
-            fillColor: '#0066ff',
-            fillOpacity: 1,
-            radius: 5
-        }).addTo(currentMap).bindPopup('Sua localização atual');
-
-        // 5. Processamento dos postes cadastrados
-        if (postesCadastrados?.length > 0) {
-            console.log('Dados dos postes para renderizar:', postesCadastrados);
-
-            // Filtra postes com coordenadas válidas
-            const postesValidos = postesCadastrados.filter(poste =>
-                Array.isArray(poste.coords) &&
-                !isNaN(poste.coords[0]) &&
-                !isNaN(poste.coords[1])
-            );
-
-            markersGroupRef.current = L.layerGroup();
-            const validBounds = L.latLngBounds([userCoords]);
-
-            postesCadastrados.forEach((poste, index) => {
-                if (!poste.coords || !Array.isArray(poste.coords)) {
-                    console.error(`Poste ${index} ignorado - coordenadas inválidas:`, poste.coords);
-                    return;
-                }
-
-                const coords = [
-                    Number(poste.coords[0]),
-                    Number(poste.coords[1])
-                ];
-
-                if (coords.some(isNaN)) {  // <-- ERRO AQUI (parêntese extra)
-                    console.error(`Poste ${index} ignorado - coordenadas não numéricas:`, poste.coords);
-                    return;
-                }
-
-                // Cria o marcador vermelho
-                L.circleMarker(coords, {
-                    color: '#ff0000',
-                    fillColor: '#ff0000',
-                    fillOpacity: 0.8,
-                    radius: 10
-                }).addTo(markersGroupRef.current)
-                    .bindPopup(`
-                    <b>Poste #${index + 1}</b><br>
-                    ${poste.endereco || 'Endereço não disponível'}<br>
-                    <small>Cidade: ${poste.cidade || 'Não informada'}</small>
-                `);
-
-                validBounds.extend(coords);
-            });
-
-            markersGroupRef.current.addTo(currentMap);
-
-            requestAnimationFrame(() => {
-                if (validBounds.isValid() && !validBounds.getCenter().equals([0, 0])) {
-                    currentMap.fitBounds(validBounds.pad(0.2));
-                }
-                currentMap.invalidateSize();
-            });
-        }
-
-        return () => {
-            if (!mostrarMapa && mapInstance) {
-                mapInstance.remove();
-                setMapInstance(null);
-            }
-        };
-    }, [mostrarMapa, userCoords, postesCadastrados, isLoadingLocation]);
-
-    // Função para fechar o mapa (definida fora do useEffect)
-    const fecharMapa = () => {
+      if (liveCoords && !isLastPost) {
+        setUserCoords(liveCoords);
+        setUserAccuracy(accuracy);
+        
+        // Atualiza o marcador no mapa se existir
         if (mapInstance) {
-            mapInstance.remove();
-            setMapInstance(null);
+          updateUserMarker(liveCoords);
         }
-        setMostrarMapa(false);
+      }
+    }, [liveCoords, accuracy, isLastPost, mapInstance]);
+    
+    // Busca postes cadastrados e atualiza o estado
+    const fetchPostesCadastrados = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+    
+        const postesProcessados = response.data.data.map(poste => {
+          const coords = poste.coords || 
+            (poste.latitude && poste.longitude ? 
+              [poste.latitude, poste.longitude] : 
+              null);
+          
+          return {
+            ...poste,
+            coords: coords ? coords.map(Number) : null
+          };
+        });
+    
+        const postesValidos = postesProcessados.filter(poste =>
+          poste.coords &&
+          !isNaN(poste.coords[0]) &&
+          !isNaN(poste.coords[1])
+        );
+    
+        setPostesCadastrados(postesValidos);
+        return postesValidos;
+      } catch (error) {
+        console.error("Erro ao buscar postes:", {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message
+        });
+        return [];
+      }
+    };
+    
+    // Preenche os campos do formulário com dados do endereço
+    useEffect(() => {
+      if (endereco) {
+        const updates = {
+          cidade: endereco.cidade || cidade,
+          enderecoInput: endereco.rua || enderecoInput,
+          cep: endereco.cep || cep
+        };
+    
+        if (!isNumeroManual) {
+          updates.numero = endereco.numero || numero;
+        }
+    
+        setCidade(prev => updates.cidade !== prev ? updates.cidade : prev);
+        setEnderecoInput(prev => updates.enderecoInput !== prev ? updates.enderecoInput : prev);
+        setCep(prev => updates.cep !== prev ? updates.cep : prev);
+        setNumero(prev => updates.numero !== undefined && updates.numero !== prev ? updates.numero : prev);
+    
+        if (endereco.bairro && !localizacao) {
+          setLocalizacao(endereco.bairro);
+        }
+      }
+    }, [endereco, isNumeroManual]);
+    
+    // Atualiza o marcador do usuário no mapa
+    const updateUserMarker = (newCoords) => {
+      mapInstance.eachLayer(layer => {
+        if (layer.options.color === '#0066ff') {
+          mapInstance.removeLayer(layer);
+        }
+      });
+    
+      L.circleMarker(newCoords, {
+        color: '#0066ff',
+        fillColor: '#0066ff',
+        fillOpacity: 1,
+        radius: 5
+      }).addTo(mapInstance).bindPopup('Sua localização atual');
+    };
+    
+    // Adiciona marcadores dos postes ao mapa
+    const addPostMarkers = (map, postes) => {
+      const markersGroup = L.layerGroup();
+      const bounds = L.latLngBounds(userCoords ? [userCoords] : []);
+    
+      postes.forEach((poste, index) => {
+        if (!poste.coords || !Array.isArray(poste.coords)) return;
+    
+        const coords = poste.coords.map(Number);
+        if (coords.some(isNaN)) return;
+    
+        L.circleMarker(coords, {
+          color: '#ff0000',
+          fillColor: '#ff0000',
+          fillOpacity: 0.8,
+          radius: 10
+        }).addTo(markersGroup).bindPopup(`
+          <b>Poste #${index + 1}</b><br>
+          ${poste.endereco || 'Endereço não disponível'}<br>
+          <small>Cidade: ${poste.cidade || 'Não informada'}</small>
+        `);
+    
+        bounds.extend(coords);
+      });
+    
+      markersGroup.addTo(map);
+      
+      if (bounds.isValid() && !bounds.getCenter().equals([0, 0])) {
+        map.fitBounds(bounds.pad(0.2));
+      }
+      
+      return markersGroup;
+    };
+    
+    // Inicializa e gerencia o mapa
+    useEffect(() => {
+      if (!mostrarMapa || !userCoords || isLoadingLocation) return;
+    
+      const initMap = () => {
+        if (!mapInstance) {
+          const newMap = L.map('mapa', {
+            zoomControl: true,
+            preferCanvas: true
+          }).setView(userCoords, 18);
+    
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+          }).addTo(newMap);
+    
+          // Adiciona marcador do usuário
+          updateUserMarker(userCoords);
+          setTimeout(() => newMap.invalidateSize(), 100);
+          
+          setMapInstance(newMap);
+          return newMap;
+        }
+        return mapInstance;
+      };
+    
+      const currentMap = initMap();
+      addPostMarkers(currentMap, postesCadastrados);
+    
+      return () => {
+        if (!mostrarMapa && mapInstance) {
+          mapInstance.remove();
+          setMapInstance(null);
+        }
+      };
+    }, [mostrarMapa, userCoords, postesCadastrados, isLoadingLocation]);
+    
+    // Obtém localização do usuário
+    const obterLocalizacaoUsuario = async () => {
+      setLocalizacaoError(null);
+      setIsLoadingLocation(true);
+      setMostrarMapa(false);
+    
+      try {
+        if (!navigator.geolocation) {
+          throw new Error("Geolocalização não suportada pelo navegador");
+        }
+    
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            resolve,
+            reject,
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          );
+        });
+    
+        const { latitude, longitude, accuracy } = position.coords;
+        const newCoords = [latitude, longitude];
+    
+        setUserCoords(newCoords);
+        setUserAccuracy(accuracy);
+    
+        try {
+          await fetchPostesCadastrados();
+        } catch (error) {
+          console.warn("Erro ao carregar postes", error);
+        }
+    
+        setMostrarMapa(true);
+      } catch (error) {
+        console.error("Falha na obtenção de localização:", error);
+        
+        let errorMessage = "Não foi possível obter localização precisa.";
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMessage = "Permissão de localização negada. Por favor, habilite no navegador.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMessage = "Localização indisponível. Verifique sua conexão ou GPS.";
+        } else if (error.code === error.TIMEOUT) {
+          errorMessage = "Tempo de espera excedido. Tente novamente em área aberta.";
+        } else if (error.message.includes('token')) {
+          errorMessage = "Sessão expirada. Redirecionando para login...";
+          localStorage.removeItem('token');
+          setTimeout(() => window.location.href = '/login', 2000);
+        }
+    
+        setLocalizacaoError(errorMessage);
+    
+        if (!userCoords) {
+          setUserCoords([-23.5505, -46.6333]);
+          setMostrarMapa(true);
+        }
+      } finally {
+        setIsLoadingLocation(false);
+      }
+    };
+    
+    // Fecha o mapa
+    const fecharMapa = () => {
+      if (mapInstance) {
+        mapInstance.remove();
+        setMapInstance(null);
+      }
+      setMostrarMapa(false);
     };
 
     // Estado para as fotos (mantém a mesma declaração)
@@ -883,10 +856,19 @@ function Cadastro() {
 
                                 <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
+                                
+                                <BotaoCamera
+                                    label="Foto da Luminária *"
+                                    onFotoCapturada={handleFotoLuminaria}
+                                />
+
+                                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
                                 {/* Componente para foto da árvore */}
                                 <BotaoCamera
                                     label="Foto da Árvore"
                                     onFotoCapturada={handleFotoArvore}
+                                    modoMultiplasFotos={true} // Adicione esta linha
                                 />
 
                                 <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
@@ -906,12 +888,6 @@ function Cadastro() {
 
                                 <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                                <BotaoCamera
-                                    label="Foto da Luminária *"
-                                    onFotoCapturada={handleFotoLuminaria}
-                                />
-
-                                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                                 {/* Componente para foto telecon */}
                                 <BotaoCamera

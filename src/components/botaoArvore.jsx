@@ -1,225 +1,361 @@
-/*import React, { useRef, useState } from "react";
-import { FaCamera, FaSave, FaTimes } from "react-icons/fa";
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { FaCamera, FaCheck, FaTimes, FaMapMarkerAlt } from 'react-icons/fa';
 
-const BotaoArvore = ({ label, onFotoCapturada }) => {
-  const videoRef = useRef(null); // Referência para o elemento <video>
-  const [fotoCapturada, setFotoCapturada] = useState(null); // Estado para armazenar a foto capturada
-  const [cameraAberta, setCameraAberta] = useState(false); // Estado para controlar se a câmera está aberta
-  const [proximoId, setProximoId] = useState(1); // Estado para gerar IDs únicos
-  const [botaoDesabilitado, setBotaoDesabilitado] = useState(false); // Estado para desabilitar o botão "Tirar Foto"
-  const [fotosSalvas, setFotosSalvas] = useState([]); // Estado para armazenar as fotos salvas
+const BotaoArvore = ({ label, onFotoCapturada, posteId = null, className = '' }) => {
+  const [state, setState] = useState({
+    fotosTemporarias: [], // Fotos não confirmadas
+    fotosConfirmadas: [], // Fotos que serão enviadas
+    fotoAtual: null,
+    modoCamera: false,
+    stream: null,
+    error: null,
+    isLoading: false,
+    proximoId: 1,
+    coords: null // Coordenadas GPS atuais
+  });
 
-  // Função para abrir a câmera traseira
-  const abrirCamera = async () => {
-    try {
-      // Solicita acesso à câmera traseira
-      const constraints = {
-        video: {
-          facingMode: "environment", // Prioriza a câmera traseira
+  const videoRef = useRef(null);
+  const canvasRef = useRef(document.createElement('canvas'));
+
+  // Obter coordenadas GPS
+  const obterCoordenadas = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocalização não suportada"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          resolve({
+            latitude,
+            longitude,
+            accuracy,
+            timestamp: new Date(position.timestamp).toISOString()
+          });
         },
-      };
+        (error) => reject(error),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+  }, []);
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  // Gera ID único com coordenadas
+  const gerarIdUnico = useCallback(async () => {
+    try {
+      const coords = await obterCoordenadas();
+      setState(prev => ({ ...prev, coords }));
+      
+      const id = `${coords.latitude.toFixed(6)}-${coords.longitude.toFixed(6)}-${Date.now()}`;
+      return { id, coords };
+    } catch (error) {
+      console.error("Erro ao obter coordenadas:", error);
+      const id = `no-gps-${Date.now()}`;
+      return { id, coords: null };
+    }
+  }, [obterCoordenadas]);
 
-      // Verifica se o componente ainda está montado antes de atribuir o stream
+  // Limpeza de recursos
+  useEffect(() => {
+    return () => {
+      if (state.stream) {
+        state.stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [state.stream]);
+
+  const iniciarCamera = useCallback(async () => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-
-        // Tenta reproduzir o vídeo e trata erros
-        videoRef.current.play().catch((error) => {
-          console.error("Erro ao reproduzir o vídeo:", error);
-        });
+        await videoRef.current.play();
       }
+
+      setState(prev => ({
+        ...prev,
+        stream,
+        modoCamera: true,
+        isLoading: false
+      }));
+
     } catch (error) {
-      console.error("Erro ao acessar a câmera:", error);
-      alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      console.error("Erro ao acessar câmera:", error);
+      setState(prev => ({
+        ...prev,
+        error: "Não foi possível acessar a câmera. Verifique as permissões.",
+        isLoading: false
+      }));
     }
-  };
+  }, []);
 
-  // Função para lidar com o clique no botão "Abrir Câmera"
-  const handleAbrirCamera = async () => {
-    setCameraAberta(true); // Abre a câmera
-    await abrirCamera(); // Inicia o stream de vídeo
-  };
+  const capturarFoto = useCallback(async () => {
+    try {
+      const video = videoRef.current;
+      if (!video || !state.stream) return;
 
-  // Função para capturar a foto
-  const capturarFoto = () => {
-    setBotaoDesabilitado(true); // Desabilita o botão "Tirar Foto"
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const video = videoRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Obter metadados com geolocalização
+      const { id, coords } = await gerarIdUnico();
+      
+      canvas.toBlob((blob) => {
+        if (!blob) throw new Error("Não foi possível gerar a imagem");
 
-    // Converte a imagem capturada para uma URL (base64)
-    const fotoURL = canvas.toDataURL("image/png");
+        const fotoURL = URL.createObjectURL(blob);
+        const nomeArquivo = `arvore-${posteId || 'na'}-${id}.jpg`;
+        const file = new File([blob], nomeArquivo, { type: "image/jpeg" });
 
-    // Obtém a localização atual
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-
-        // Cria um objeto com os dados da foto
         const novaFoto = {
-          id: proximoId, // ID único
-          fotoURL, // URL da foto
-          localizacao: { latitude, longitude }, // Localização
+          id,
+          file,
+          fotoURL,
+          posteId,
+          coords, // Inclui coordenadas
+          timestamp: new Date().toISOString(),
+          confirmada: false // Não confirmada ainda
         };
 
-        console.log("Dados da foto capturada:", novaFoto); // Depuração
+        // Parar a câmera
+        state.stream.getTracks().forEach(track => track.stop());
 
-        // Atualiza o estado das fotos
-        setFotoCapturada(fotoURL);
+        setState(prev => ({
+          ...prev,
+          fotoAtual: novaFoto,
+          fotosTemporarias: [...prev.fotosTemporarias, novaFoto],
+          stream: null,
+          modoCamera: false
+        }));
 
-        // Incrementa o ID para a próxima foto
-        setProximoId((prevId) => prevId + 1);
+      }, 'image/jpeg', 0.8);
 
-        // Chama a função onFotoCapturada passada como prop
-        if (onFotoCapturada) {
-          onFotoCapturada(novaFoto);
-        }
+    } catch (error) {
+      console.error("Erro ao capturar foto:", error);
+      setState(prev => ({
+        ...prev,
+        error: error.message,
+        isLoading: false
+      }));
+    }
+  }, [state.stream, posteId, gerarIdUnico]);
 
-        // Fecha a câmera após a foto ser capturada
-        if (videoRef.current && videoRef.current.srcObject) {
-          const stream = videoRef.current.srcObject;
-          const tracks = stream.getTracks();
-          tracks.forEach((track) => track.stop()); // Para todas as tracks do stream
-        }
+  // Confirmar foto para envio
+  const confirmarFoto = useCallback((fotoId) => {
+    setState(prev => {
+      const fotoIndex = prev.fotosTemporarias.findIndex(f => f.id === fotoId);
+      if (fotoIndex === -1) return prev;
 
-        setCameraAberta(false); // Fecha a câmera
-      },
-      (error) => {
-        console.error("Erro ao obter localização:", error);
-        alert("Não foi possível obter a localização. Verifique as permissões.");
-        setBotaoDesabilitado(false); // Reabilita o botão "Tirar Foto" em caso de erro
-      }
-    );
-  };
+      const foto = { ...prev.fotosTemporarias[fotoIndex], confirmada: true };
+      
+      return {
+        ...prev,
+        fotosTemporarias: prev.fotosTemporarias.filter(f => f.id !== fotoId),
+        fotosConfirmadas: [...prev.fotosConfirmadas, foto],
+        fotoAtual: null
+      };
+    });
+  }, []);
 
-  // Função para salvar a foto
-  const salvarFoto = () => {
-    const novaFotoSalva = {
-      id: proximoId - 1, // Usa o ID da última foto capturada
-      fotoURL: fotoCapturada,
-    };
+  // Remover foto temporária
+  const removerFotoTemporaria = useCallback((fotoId) => {
+    setState(prev => ({
+      ...prev,
+      fotosTemporarias: prev.fotosTemporarias.filter(f => f.id !== fotoId),
+      fotoAtual: prev.fotoAtual?.id === fotoId ? null : prev.fotoAtual
+    }));
+  }, []);
 
-    // Adiciona a foto à lista de fotos salvas
-    setFotosSalvas((prevFotos) => [...prevFotos, novaFotoSalva]);
+  // Cancelar captura atual
+  const cancelarCaptura = useCallback(() => {
+    if (state.stream) {
+      state.stream.getTracks().forEach(track => track.stop());
+    }
+    
+    setState(prev => ({
+      ...prev,
+      stream: null,
+      modoCamera: false,
+      fotoAtual: null,
+      error: null
+    }));
+  }, [state.stream]);
 
-    console.log("Foto salva:", novaFotoSalva);
-    alert("Foto salva com sucesso!");
-
-    // Limpa a foto capturada e reabilita o botão "Tirar Foto"
-    setFotoCapturada(null);
-    setBotaoDesabilitado(false);
-  };
-
-  // Função para cancelar a foto
-  const cancelarFoto = () => {
-    setFotoCapturada(null); // Remove a foto capturada
-    setCameraAberta(false); // Fecha a câmera
-    setBotaoDesabilitado(false); // Reabilita o botão "Tirar Foto"
-  };
+  // Enviar fotos confirmadas
+  const enviarFotos = useCallback(() => {
+    if (state.fotosConfirmadas.length > 0 && onFotoCapturada) {
+      onFotoCapturada(state.fotosConfirmadas);
+      setState(prev => ({ ...prev, fotosConfirmadas: [] }));
+    }
+  }, [state.fotosConfirmadas, onFotoCapturada]);
 
   return (
-    <div className="mb-8">
-      {/* Botão para abrir a câmera */
-     /* {!cameraAberta && !fotoCapturada && (
-        /*<div className="flex justify-between items-center">
-          <span className="text-gray-700">{label}</span> {/* Label à esquerda */
-          /*<button
-            onClick={handleAbrirCamera}
-            className="flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <FaCamera className="text-lg" /> {/* Ícone de câmera */
-         // </button>
-       /* </div>
-      )}
-
-      {/* Elemento para exibir o vídeo da câmera */
-     /* {cameraAberta && (
-        <div>
-          <video
-            ref={videoRef}
-            width="400"
-            height="300"
-            className="block mt-4 border border-gray-300 rounded-md"
-            muted // Adiciona o atributo muted para evitar problemas de autoplay
-          />
-          {/* Botão para capturar a foto */
-         /* <button
-            onClick={capturarFoto}
-            disabled={botaoDesabilitado} // Desabilita o botão após a captura
-            className={`mt-4 flex items-center justify-center bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 ${
-              botaoDesabilitado ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
-            <FaCamera /> Tirar Foto
-          </button>
-        </div>
-      )}
-
-      {/* Exibe a foto capturada em tamanho reduzido */
-     /* {fotoCapturada && (
-        <div className="mt-4 text-center">
-          <img
-            src={fotoCapturada}
-            alt="Foto capturada"
-            className="w-1/4 mx-auto border border-gray-300 rounded-md"
-          />
-          {/* Botões Salvar e Cancelar */
-        /*  <div className="mt-4 flex justify-center gap-20">
-            <button
-              onClick={salvarFoto}
-              className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <FaSave /> Salvar
+    <div className={`arvore-container ${className}`}>
+      {/* Modo Câmera */}
+      {state.modoCamera && (
+        <div className="camera-mode">
+          <video ref={videoRef} autoPlay muted playsInline />
+          <div className="camera-controls">
+            <button onClick={capturarFoto} className="btn-capture">
+              <FaCamera />
             </button>
-            <button
-              onClick={cancelarFoto}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <FaTimes /> Cancelar
+            <button onClick={cancelarCaptura} className="btn-cancel">
+              <FaTimes />
             </button>
           </div>
         </div>
       )}
 
-      {/* Exibe as fotos salvas lado a lado */
-    /*  {fotosSalvas.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-lg font-bold mb-4">Fotos Salvas</h3>
-          <div className="flex flex-wrap gap-4">
-            {fotosSalvas.map((foto) => (
-              <div key={foto.id} className="flex flex-col items-center">
-                <img
-                  src={foto.fotoURL}
-                  alt={`Foto salva ${foto.id}`}
-                  className="w-32 h-32 object-cover border border-gray-300 rounded-md"
-                />
-                <p className="text-center mt-2">ID: {foto.id}</p>
+      {/* Fotos Temporárias (pré-visualização) */}
+      {state.fotosTemporarias.length > 0 && (
+        <div className="preview-mode">
+          <h4>Fotos capturadas (não confirmadas)</h4>
+          <div className="photo-grid">
+            {state.fotosTemporarias.map(foto => (
+              <div key={foto.id} className="photo-item">
+                <img src={foto.fotoURL} alt={`Árvore ${foto.id}`} />
+                <div className="photo-meta">
+                  {foto.coords && (
+                    <span>
+                      <FaMapMarkerAlt /> 
+                      {foto.coords.latitude.toFixed(6)}, {foto.coords.longitude.toFixed(6)}
+                    </span>
+                  )}
+                  <span>ID: {foto.id.split('-').slice(-1)[0]}</span>
+                </div>
+                <div className="photo-actions">
+                  <button 
+                    onClick={() => confirmarFoto(foto.id)} 
+                    className="btn-confirm"
+                  >
+                    <FaCheck /> Confirmar
+                  </button>
+                  <button 
+                    onClick={() => removerFotoTemporaria(foto.id)} 
+                    className="btn-remove"
+                  >
+                    <FaTimes /> Remover
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Botão para tirar uma nova foto */
-    /*  {fotosSalvas.length > 0 && (
-        <div className="mt-4 flex justify-center">
-          <button
-            onClick={handleAbrirCamera}
-            className="flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <FaCamera className="text-lg" /> Tirar Nova Foto
+      {/* Fotos Confirmadas */}
+      {state.fotosConfirmadas.length > 0 && (
+        <div className="confirmed-photos">
+          <h4>Fotos confirmadas para envio ({state.fotosConfirmadas.length})</h4>
+          <button onClick={enviarFotos} className="btn-submit">
+            Enviar Todas as Fotos
           </button>
         </div>
+      )}
+
+      {/* Botão Inicial */}
+      {!state.modoCamera && state.fotosTemporarias.length === 0 && (
+        <button onClick={iniciarCamera} className="btn-start">
+          <FaCamera /> {label}
+        </button>
       )}
     </div>
   );
 };
 
-export default BotaoArvore;*/
+// Estilos (simplificados para exemplo)
+const styles = `
+  .arvore-container {
+    border: 1px solid #ddd;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+  
+  .camera-mode {
+    position: relative;
+  }
+  
+  .camera-mode video {
+    width: 100%;
+    max-height: 400px;
+    background: #000;
+  }
+  
+  .camera-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  
+  .photo-item {
+    border: 1px solid #eee;
+    padding: 0.5rem;
+    border-radius: 4px;
+  }
+  
+  .photo-item img {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+  }
+  
+  .photo-meta {
+    font-size: 0.8rem;
+    margin: 0.5rem 0;
+  }
+  
+  .photo-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .btn-start, .btn-capture, .btn-confirm, .btn-submit {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .btn-cancel, .btn-remove {
+    background: #f44336;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+`;
 
+// Adiciona estilos
+const styleSheet = document.createElement("style");
+styleSheet.innerHTML = styles;
+document.head.appendChild(styleSheet);
+
+export default BotaoArvore;

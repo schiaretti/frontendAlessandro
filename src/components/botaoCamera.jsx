@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 
 /**
- * Componente BotaoCamera - Permite capturar fotos usando a câmera do dispositivo
+ * Componente BotaoCamera - Permite capturar fotos usando a câmera nativa do dispositivo
  * 
  * Props:
  * @param {string} label - Rótulo para identificar a foto
@@ -9,151 +9,78 @@ import React, { useState, useRef, useEffect } from 'react';
  * @param {boolean} obrigatorio - Indica se a foto é obrigatória
  */
 const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
-  // ========== REFERÊNCIAS ==========
-  // useRef cria referências para elementos DOM
-  const videoRef = useRef(null);    // Referência para o elemento <video>
-  const canvasRef = useRef(null);   // Referência para o elemento <canvas> oculto
-
-  // ========== ESTADOS ==========
-  const [stream, setStream] = useState(null);          // Stream da câmera
-  const [error, setError] = useState(null);            // Mensagens de erro
-  const [capturedImage, setCapturedImage] = useState(null); // URL da imagem capturada
-  const [isCameraActive, setIsCameraActive] = useState(false); // Se a câmera está ativa
-  const [capturedFile, setCapturedFile] = useState(null);     // Arquivo da foto
-  const [fotoCapturada, setFotoCapturada] = useState(false); // Se a foto foi capturada
-
-  // ========== FUNÇÕES PRINCIPAIS ==========
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [fotoCapturada, setFotoCapturada] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Referência para o input de arquivo oculto
+  const fileInputRef = React.useRef(null);
 
   /**
-   * Para a câmera e libera os recursos
+   * Abre a câmera nativa do dispositivo
    */
-  const pararCamera = () => {
-    if (stream) {
-      // Para todas as tracks (áudio/vídeo) da stream
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-      
-      // Remove a stream do elemento de vídeo
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    }
-    setIsCameraActive(false);
-  };
-
-  /**
-   * Inicia a câmera do dispositivo
-   */
-  const iniciarCamera = async () => {
+  const abrirCameraNativa = () => {
     try {
-      // Reseta estados
-      setError(null);
+      // Limpa estados anteriores
       setCapturedImage(null);
-      setCapturedFile(null);
       setFotoCapturada(false);
-      setIsCameraActive(true);
-
-      // Configurações da câmera
-      const constraints = {
-        video: {
-          width: { ideal: 1280 },  // Largura ideal
-          height: { ideal: 720 }   // Altura ideal
+      setError(null);
+      
+      // Cria um input do tipo file com captura pela câmera
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      
+      // Configura para usar a câmera (em dispositivos móveis)
+      input.capture = 'environment'; // 'user' para frontal, 'environment' para traseira
+      
+      // Evento quando uma imagem é selecionada
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const imageUrl = URL.createObjectURL(file);
+          setCapturedImage(imageUrl);
+          setFotoCapturada(true);
         }
       };
-
-      // Solicita acesso à câmera
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      // Conecta a stream ao elemento de vídeo
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-      }
+      
+      // Evento para tratar erros
+      input.onerror = () => {
+        setError('Não foi possível acessar a câmera. Por favor, verifique as permissões.');
+      };
+      
+      // Dispara o clique no input
+      input.click();
+      
     } catch (err) {
       console.error("Erro ao acessar a câmera:", err);
       setError(`Erro ao acessar a câmera: ${err.message}`);
-      setIsCameraActive(false);
-    }
-  };
-
-  /**
-   * Captura uma imagem da câmera
-   */
-  const capturarImagem = async () => {
-    try {
-      // Verifica se os elementos existem
-      if (!videoRef.current || !canvasRef.current) {
-        throw new Error("Elementos de vídeo ou canvas não encontrados");
-      }
-
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-
-      // Ajusta o canvas para o tamanho do vídeo
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      // Desenha o frame atual do vídeo no canvas
-      const context = canvas.getContext('2d');
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Verifica se a imagem foi gerada
-      if (canvas.width === 0 || canvas.height === 0) {
-        throw new Error("Não foi possível gerar a imagem");
-      }
-
-      // Converte o canvas para um Blob (binário) e depois para File
-      return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-          // Cria um objeto File com nome e tipo
-          const file = new File([blob], `foto-${Date.now()}.jpg`, {
-            type: 'image/jpeg',
-            lastModified: Date.now()
-          });
-
-          // Cria uma URL para pré-visualização
-          const imageUrl = URL.createObjectURL(blob);
-          
-          // Atualiza estados
-          setCapturedImage(imageUrl);
-          setCapturedFile(file);
-          setFotoCapturada(true);
-          
-          // Para a câmera após captura
-          pararCamera();
-          
-          resolve(file);
-        }, 'image/jpeg', 0.9); // 90% de qualidade
-      });
-    } catch (err) {
-      console.error("Erro ao capturar imagem:", err);
-      setError(`Erro ao capturar imagem: ${err.message}`);
-      throw err;
     }
   };
 
   /**
    * Salva a foto capturada
    */
-  const handleSave = async () => {
+  const handleSave = () => {
     try {
-      if (capturedFile) {
-        console.log(`Foto ${label} salva:`, capturedFile);
-        
-        // Chama a função passada via props com o arquivo
-        onFotoCapturada(capturedFile);
-        
-        // Limpa a pré-visualização
-        if (capturedImage) {
-          URL.revokeObjectURL(capturedImage);
-        }
-        
-        // Reseta estados
-        setCapturedImage(null);
-        setCapturedFile(null);
-        setFotoCapturada(false);
-      } else {
-        throw new Error("Nenhuma imagem foi capturada");
+      if (capturedImage) {
+        // Cria um arquivo a partir da URL (simulação)
+        fetch(capturedImage)
+          .then(res => res.blob())
+          .then(blob => {
+            const file = new File([blob], `foto-${Date.now()}.jpg`, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            
+            // Chama a função passada via props
+            onFotoCapturada(file);
+            
+            // Limpa a pré-visualização
+            URL.revokeObjectURL(capturedImage);
+            setCapturedImage(null);
+            setFotoCapturada(false);
+          });
       }
     } catch (err) {
       console.error("Erro ao salvar foto:", err);
@@ -165,33 +92,13 @@ const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
    * Cancela a foto capturada
    */
   const handleCancel = () => {
-    // Libera a URL da pré-visualização
     if (capturedImage) {
       URL.revokeObjectURL(capturedImage);
     }
-    
-    // Reseta estados
     setCapturedImage(null);
-    setCapturedFile(null);
     setFotoCapturada(false);
   };
 
-  // ========== EFEITOS COLATERAIS ==========
-  
-  /**
-   * Efeito de limpeza quando o componente é desmontado
-   */
-  useEffect(() => {
-    return () => {
-      pararCamera();
-      // Libera a URL da pré-visualização se existir
-      if (capturedImage) {
-        URL.revokeObjectURL(capturedImage);
-      }
-    };
-  }, [capturedImage]);
-
-  // ========== RENDERIZAÇÃO ==========
   return (
     <div className={`relative ${obrigatorio && !fotoCapturada ? 'ring-2 ring-red-500 rounded-lg p-1' : ''}`}>
       {/* Cabeçalho com label e indicador de obrigatoriedade */}
@@ -211,11 +118,11 @@ const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
         </div>
       )}
 
-      {/* Botão para abrir a câmera (mostra quando a câmera não está ativa) */}
-      {!isCameraActive && !capturedImage && (
+      {/* Botão para abrir a câmera nativa */}
+      {!fotoCapturada && (
         <button
-          onClick={iniciarCamera}
-          className="flex items-center justify-center p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-md"
+          onClick={abrirCameraNativa}
+          className="flex items-center justify-center p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-md mt-2"
           title="Abrir câmera"
           aria-label="Abrir câmera"
         >
@@ -226,34 +133,9 @@ const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
         </button>
       )}
 
-      {/* Visualização da câmera (mostra quando a câmera está ativa) */}
-      {isCameraActive && (
-        <div className="relative w-full max-w-xs bg-black rounded-lg overflow-hidden aspect-video">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-            aria-label="Visualização da câmera"
-          />
-          <button
-            onClick={capturarImagem}
-            className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center justify-center p-3 bg-white rounded-full hover:bg-gray-200 transition-colors shadow-lg"
-            title="Capturar imagem"
-            aria-label="Capturar imagem"
-          >
-            <div className="h-8 w-8 bg-red-500 rounded-full border-2 border-white"></div>
-          </button>
-        </div>
-      )}
-
-      {/* Canvas oculto usado para capturar a imagem */}
-      <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
-
       {/* Pré-visualização da imagem capturada */}
       {capturedImage && (
-        <div className="flex flex-col items-center gap-3 w-full">
+        <div className="flex flex-col items-center gap-3 w-full mt-2">
           <div className="w-full max-w-xs border border-gray-200 rounded-lg overflow-hidden">
             <img 
               src={capturedImage} 
@@ -266,28 +148,47 @@ const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
           <div className="flex gap-4">
             <button
               onClick={handleSave}
-              className="flex items-center justify-center p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors"
+              className="flex items-center justify-center p-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors px-4"
               title="Salvar foto"
               aria-label="Salvar foto"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
+              Salvar
             </button>
 
             <button
               onClick={handleCancel}
-              className="flex items-center justify-center p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
-              title="Cancelar"
-              aria-label="Cancelar foto"
+              className="flex items-center justify-center p-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors px-4"
+              title="Repetir foto"
+              aria-label="Repetir foto"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
               </svg>
+              Repetir
             </button>
           </div>
         </div>
       )}
+      
+      {/* Input de arquivo oculto */}
+      <input 
+        type="file" 
+        ref={fileInputRef}
+        accept="image/*" 
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const imageUrl = URL.createObjectURL(file);
+            setCapturedImage(imageUrl);
+            setFotoCapturada(true);
+          }
+        }}
+      />
     </div>
   );
 };

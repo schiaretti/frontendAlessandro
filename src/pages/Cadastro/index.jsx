@@ -114,13 +114,17 @@ function Cadastro() {
 
     // Atualiza coordenadas quando o hook retorna novas
     useEffect(() => {
-        if (liveCoords && !isLastPost) {
+        if (liveCoords && !isLastPost && !arraysEqual(liveCoords, userCoords)) {
             setUserCoords(liveCoords);
             setUserAccuracy(accuracy);
             updateUserMarker(liveCoords);
         }
-    }, [liveCoords, accuracy, isLastPost]);
+    }, [liveCoords, accuracy, isLastPost, userCoords]);
 
+    // Função auxiliar para comparar arrays
+    function arraysEqual(a, b) {
+        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
+    }
     // Preenche campos do endereço automaticamente
     useEffect(() => {
         if (endereco) {
@@ -142,21 +146,22 @@ function Cadastro() {
     // Gerencia o ciclo de vida do mapa
     useEffect(() => {
         if (mostrarMapa && userCoords) {
-            initMap();
+            if (!mapRef.current) {
+                initMap();
+            } else {
+                mapRef.current.setView(userCoords, 18);
+                updateUserMarker(userCoords);
+            }
         }
 
         return () => {
-            if (mapRef.current) {
-                mapRef.current.remove();
-                mapRef.current = null;
-                markersGroupRef.current = null;
-            }
+            // Mantenha a limpeza como está
         };
     }, [mostrarMapa, userCoords]);
 
     // Atualiza marcadores quando postes mudam
     useEffect(() => {
-        if (mapRef.current && markersGroupRef.current) {
+        if (mapRef.current && markersGroupRef.current && postesCadastrados.length > 0) {
             addPostMarkers();
         }
     }, [postesCadastrados]);
@@ -260,28 +265,28 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-  // Adiciona marcadores dos postes
-const addPostMarkers = () => {
-    if (!mapRef.current || !markersGroupRef.current) return;
+    // Adiciona marcadores dos postes
+    const addPostMarkers = () => {
+        if (!mapRef.current || !markersGroupRef.current) return;
 
-    markersGroupRef.current.clearLayers();
-    const bounds = L.latLngBounds(userCoords ? [userCoords] : []);
+        markersGroupRef.current.clearLayers();
+        const bounds = L.latLngBounds(userCoords ? [userCoords] : []);
 
-    postesCadastrados.forEach((poste, index) => {
-        if (!poste.coords || !Array.isArray(poste.coords)) return;
+        postesCadastrados.forEach((poste, index) => {
+            if (!poste.coords || !Array.isArray(poste.coords)) return;
 
-        const coords = poste.coords.map(Number);
-        if (coords.some(isNaN)) return;
+            const coords = poste.coords.map(Number);
+            if (coords.some(isNaN)) return;
 
-        const marker = L.marker(coords, {
-            icon: L.divIcon({
-                html: `
+            const marker = L.marker(coords, {
+                icon: L.divIcon({
+                    html: `
                     <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
                 `,
-                iconSize: [10, 10], // Tamanho reduzido
-                className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
-            })
-        }).bindPopup(`
+                    iconSize: [10, 10], // Tamanho reduzido
+                    className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
+                })
+            }).bindPopup(`
             <div class="text-sm">
                 <b>Poste #${index + 1}</b><br>
                 ${poste.endereco || 'Endereço não disponível'}<br>
@@ -289,14 +294,14 @@ const addPostMarkers = () => {
             </div>
         `);
 
-        markersGroupRef.current.addLayer(marker);
-        bounds.extend(coords);
-    });
+            markersGroupRef.current.addLayer(marker);
+            bounds.extend(coords);
+        });
 
-    if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds.pad(0.2));
-    }
-};
+        if (bounds.isValid()) {
+            mapRef.current.fitBounds(bounds.pad(0.2));
+        }
+    };
 
     // Obtém localização do usuário
     const obterLocalizacaoUsuario = async () => {

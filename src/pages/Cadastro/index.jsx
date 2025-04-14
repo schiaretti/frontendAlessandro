@@ -104,6 +104,7 @@ function Cadastro() {
     const [posteAnterior, setPosteAnterior] = useState(null);
     const [fotos, setFotos] = useState([]);
     const [isNumeroManual, setIsNumeroManual] = useState(false);
+    const [erroFotos, setErroFotos] = useState(null);
 
     // Hook de localização
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
@@ -377,7 +378,7 @@ function Cadastro() {
     };
 
     // Adiciona foto ao estado
-    const adicionarFoto = (tipo, fotoFile) => {
+    /*const adicionarFoto = (tipo, fotoFile) => {
         if (!fotoFile) {
             console.error(`Nenhum arquivo recebido para: ${tipo}`);
             return;
@@ -441,6 +442,141 @@ function Cadastro() {
             return false;
         }
 
+        return true;
+    };*/
+
+    // Adiciona foto ao estado (versão melhorada)
+    const adicionarFoto = (tipo, fotoFile) => {
+        return new Promise((resolve, reject) => {
+            // Validações iniciais
+            if (!fotoFile) {
+                const error = `Nenhum arquivo recebido para: ${tipo}`;
+                console.error(error);
+                return reject(new Error(error));
+            }
+
+            if (!(fotoFile instanceof File)) {
+                const error = `Tipo de arquivo inválido para: ${tipo}`;
+                console.error(error, fotoFile);
+                return reject(new Error(error));
+            }
+
+            if (fotoFile.size > 5 * 1024 * 1024) {
+                const error = 'A foto é muito grande (máximo 5MB)';
+                return reject(new Error(error));
+            }
+
+            if (!fotoFile.type.startsWith('image/')) {
+                const error = 'Por favor, envie apenas imagens';
+                return reject(new Error(error));
+            }
+
+            // Atualiza o estado de forma segura
+            setFotos(prev => {
+                const novasFotos = [
+                    ...prev.filter(f => f.tipo !== tipo),
+                    {
+                        arquivo: fotoFile,
+                        tipo: tipo,
+                        coords: userCoords,
+                        id: `${tipo}-${Date.now()}`,
+                        nome: getNomeTipoFoto(tipo)
+                    }
+                ];
+                resolve(novasFotos); // Resolve com o novo estado
+                return novasFotos;
+            });
+        });
+    };
+
+    // Helper para nomes de tipos de foto
+    const getNomeTipoFoto = (tipo) => {
+        const nomes = {
+            [TIPOS_FOTO.PANORAMICA]: 'Panorâmica',
+            [TIPOS_FOTO.LUMINARIA]: 'Luminária',
+            [TIPOS_FOTO.TELECOM]: 'Telecom',
+            [TIPOS_FOTO.ARVORE]: 'Árvore',
+            [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
+        };
+        return nomes[tipo] || 'Desconhecido';
+    };
+
+    // Handlers para fotos (agora assíncronos)
+    const handleFotoPanoramica = async (fotoFile) => {
+        try {
+            await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
+    };
+
+    const handleFotoLuminaria = async (fotoFile) => {
+        try {
+            await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
+    };
+
+    const handleFotoTelecon = async (fotoFile) => {
+        try {
+            await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
+    };
+
+    const handleFoto2TipoLuminaria = async (fotoFile) => {
+        try {
+            await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
+    };
+
+    // Verificação robusta de fotos obrigatórias
+    const verificarFotos = () => {
+        const tiposObrigatorios = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
+        const nomesObrigatorios = tiposObrigatorios.map(getNomeTipoFoto);
+
+        // Filtra apenas fotos válidas (com arquivo real)
+        const fotosValidas = fotos.filter(foto =>
+            foto.arquivo instanceof File &&
+            foto.arquivo.size > 0 &&
+            foto.arquivo.type.startsWith('image/')
+        );
+
+        const tiposPresentes = fotosValidas.map(f => f.tipo);
+        const fotosFaltantes = tiposObrigatorios.filter(
+            tipo => !tiposPresentes.includes(tipo)
+        );
+
+        if (fotosFaltantes.length > 0) {
+            const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(t => `- ${getNomeTipoFoto(t)}`).join('\n')}`;
+
+            // Melhor feedback visual (substitua por seu sistema de notificação)
+            const faltantesStr = fotosFaltantes.map(getNomeTipoFoto).join(', ');
+            setErroFotos(`Adicione: ${faltantesStr}`);
+
+            // Rolagem para a primeira foto faltante
+            setTimeout(() => {
+                const primeiroTipoFaltante = fotosFaltantes[0];
+                const elemento = document.getElementById(`botao-camera-${primeiroTipoFaltante}`);
+                elemento?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+
+            return false;
+        }
+
+        setErroFotos(null);
         return true;
     };
 
@@ -727,6 +863,7 @@ function Cadastro() {
                                         label="Foto Panorâmica"
                                         onFotoCapturada={handleFotoPanoramica}
                                         obrigatorio={true}
+                                        erro={erroFotos?.includes('Panorâmica')}
                                     />
                                 </div>
                                 <p className="text-sm text-center font-bold text-gray-500">
@@ -743,6 +880,7 @@ function Cadastro() {
                                         label="Foto da Luminária"
                                         onFotoCapturada={handleFotoLuminaria}
                                         obrigatorio={true}
+                                        erro={erroFotos?.includes('Luminária')}
                                     />
                                 </div>
                                 <p className="text-sm text-center font-bold text-gray-500">

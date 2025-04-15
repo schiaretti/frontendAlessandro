@@ -3,7 +3,6 @@ import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";
-import BotaoArvore from "../../components/botaoArvore.jsx";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
@@ -11,7 +10,11 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { MarkerClusterGroup } from 'leaflet.markercluster';
 
-// Tipos de fotos permitidas
+// ==============================================
+// CONSTANTES E CONFIGURAÇÕES
+// ==============================================
+
+// Tipos de fotos permitidas com descrições amigáveis
 const TIPOS_FOTO = {
     PANORAMICA: 'PANORAMICA',
     LUMINARIA: 'LUMINARIA',
@@ -20,18 +23,7 @@ const TIPOS_FOTO = {
     LAMPADA: 'LAMPADA'
 };
 
-// Reducer para gerenciar o estado do formulário
-function formReducer(state, action) {
-    switch (action.type) {
-        case 'UPDATE_FIELD':
-            return { ...state, [action.field]: action.value };
-        case 'RESET':
-            return initialState;
-        default:
-            return state;
-    }
-}
-
+// Estado inicial do formulário
 const initialState = {
     cidade: "",
     endereco: "",
@@ -67,16 +59,33 @@ const initialState = {
     distanciaEntrePostes: "",
 };
 
+// Reducer para gerenciar o estado do formulário
+function formReducer(state, action) {
+    switch (action.type) {
+        case 'UPDATE_FIELD':
+            return { ...state, [action.field]: action.value };
+        case 'RESET':
+            return initialState;
+        default:
+            return state;
+    }
+}
+
+// ==============================================
+// COMPONENTE PRINCIPAL
+// ==============================================
+
 function Cadastro() {
     // ==============================================
     // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
     // ==============================================
 
+    // Obtém token do localStorage e decodifica
     const [token, setToken] = useState(localStorage.getItem('token'));
     const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
     const usuarioId = decoded?.id;
 
-    // Redireciona se não autenticado
+    // Redireciona se não estiver autenticado
     if (!usuarioId) {
         alert('Usuário não autenticado. Redirecionando para login...');
         window.location.href = '/login';
@@ -87,11 +96,12 @@ function Cadastro() {
     // SEÇÃO 2: ESTADOS E REFERÊNCIAS
     // ==============================================
 
-    // Referências do mapa
+    // Referências
     const mapRef = useRef(null);
     const markersGroupRef = useRef(null);
+    const fileInputRef = useRef(null);
 
-    // Estados de controle
+    // Estados do formulário
     const [state, dispatch] = useReducer(formReducer, initialState);
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
@@ -105,8 +115,9 @@ function Cadastro() {
     const [fotos, setFotos] = useState([]);
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [erroFotos, setErroFotos] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-    // Hook de localização
+    // Hook de localização personalizado
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
 
     // ==============================================
@@ -122,16 +133,12 @@ function Cadastro() {
         }
     }, [liveCoords, accuracy, isLastPost, userCoords]);
 
-    // Função auxiliar para comparar arrays
-    function arraysEqual(a, b) {
-        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
-    }
     // Preenche campos do endereço automaticamente
     useEffect(() => {
         if (endereco) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
             dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
-            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco }); // Novo
+            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
             dispatch({ type: 'UPDATE_FIELD', field: 'cep', value: endereco.cep || state.cep });
 
             if (!isNumeroManual) {
@@ -156,7 +163,10 @@ function Cadastro() {
         }
 
         return () => {
-            // Mantenha a limpeza como está
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
         };
     }, [mostrarMapa, userCoords]);
 
@@ -168,62 +178,66 @@ function Cadastro() {
     }, [postesCadastrados]);
 
     // ==============================================
-    // SEÇÃO 4: FUNÇÕES PRINCIPAIS
+    // SEÇÃO 4: FUNÇÕES AUXILIARES
     // ==============================================
 
-    // Busca postes cadastrados
-    const fetchPostesCadastrados = async () => {
-        try {
-            const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const postesProcessados = response.data.data.map(poste => {
-                const coords = poste.coords ||
-                    (poste.latitude && poste.longitude ?
-                        [poste.latitude, poste.longitude] :
-                        null);
-
-                return {
-                    ...poste,
-                    coords: coords ? coords.map(Number) : null
-                };
-            });
-
-            const postesValidos = postesProcessados.filter(poste =>
-                poste.coords &&
-                !isNaN(poste.coords[0]) &&
-                !isNaN(poste.coords[1])
-            );
-
-            setPostesCadastrados(postesValidos);
-            return postesValidos;
-        } catch (error) {
-            console.error("Erro ao buscar postes:", error);
-            if (error.response?.status === 401) {
-                handleLogout();
-            }
-            return [];
-        }
+    // Compara se dois arrays são iguais
+    const arraysEqual = (a, b) => {
+        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
     };
 
-    // Inicializa o mapa
+    // Obtém nome amigável para tipo de foto
+    const getNomeTipoFoto = (tipo) => {
+        const nomes = {
+            [TIPOS_FOTO.PANORAMICA]: 'Panorâmica',
+            [TIPOS_FOTO.LUMINARIA]: 'Luminária',
+            [TIPOS_FOTO.TELECOM]: 'Telecom',
+            [TIPOS_FOTO.ARVORE]: 'Árvore',
+            [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
+        };
+        return nomes[tipo] || 'Desconhecido';
+    };
+
+    // Calcula distância entre coordenadas em metros
+    const calcularDistancia = (lat1, lon1, lat2, lon2) => {
+        const R = 6371e3; // Raio da Terra em metros
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return Math.round(R * c);
+    };
+
+    // ==============================================
+    // SEÇÃO 5: FUNÇÕES DO MAPA
+    // ==============================================
+
+    // Inicializa o mapa Leaflet
     const initMap = () => {
         if (mapRef.current) {
             mapRef.current.setView(userCoords, 18);
             return;
         }
 
+        // Cria nova instância do mapa
         mapRef.current = L.map('mapa', {
             zoomControl: true,
             preferCanvas: true
         }).setView(userCoords, 18);
 
+        // Adiciona camada base do OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             maxZoom: 19
         }).addTo(mapRef.current);
 
+        // Configura cluster de marcadores
         markersGroupRef.current = new MarkerClusterGroup({
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
@@ -232,12 +246,12 @@ function Cadastro() {
             iconCreateFunction: function (cluster) {
                 return L.divIcon({
                     html: `
-            <div class="flex items-center justify-center w-10 h-10 rounded-full bg-orange-500/60">
-              <div class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-600/90 text-white font-bold">
-                ${cluster.getChildCount()}
-              </div>
-            </div>
-          `,
+                        <div class="flex items-center justify-center w-10 h-10 rounded-full bg-orange-500/60">
+                          <div class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-600/90 text-white font-bold">
+                            ${cluster.getChildCount()}
+                          </div>
+                        </div>
+                    `,
                     iconSize: L.point(40, 40)
                 });
             }
@@ -248,14 +262,16 @@ function Cadastro() {
         addPostMarkers();
     };
 
-    // Atualiza marcador do usuário
+    // Atualiza marcador do usuário no mapa
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
 
+        // Remove marcador existente
         if (mapRef.current.userMarker) {
             mapRef.current.removeLayer(mapRef.current.userMarker);
         }
 
+        // Adiciona novo marcador
         mapRef.current.userMarker = L.circleMarker(coords, {
             color: '#2563eb',
             fillColor: '#3b82f6',
@@ -266,7 +282,7 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-    // Adiciona marcadores dos postes
+    // Adiciona marcadores dos postes ao mapa
     const addPostMarkers = () => {
         if (!mapRef.current || !markersGroupRef.current) return;
 
@@ -282,18 +298,18 @@ function Cadastro() {
             const marker = L.marker(coords, {
                 icon: L.divIcon({
                     html: `
-                    <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
-                `,
-                    iconSize: [10, 10], // Tamanho reduzido
-                    className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
+                        <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
+                    `,
+                    iconSize: [10, 10],
+                    className: 'leaflet-marker-icon-no-border'
                 })
             }).bindPopup(`
-            <div class="text-sm">
-                <b>Poste #${index + 1}</b><br>
-                ${poste.endereco || 'Endereço não disponível'}<br>
-                <small>Cidade: ${poste.cidade || 'Não informada'}</small>
-            </div>
-        `);
+                <div class="text-sm">
+                    <b>Poste #${index + 1}</b><br>
+                    ${poste.endereco || 'Endereço não disponível'}<br>
+                    <small>Cidade: ${poste.cidade || 'Não informada'}</small>
+                </div>
+            `);
 
             markersGroupRef.current.addLayer(marker);
             bounds.extend(coords);
@@ -303,6 +319,10 @@ function Cadastro() {
             mapRef.current.fitBounds(bounds.pad(0.2));
         }
     };
+
+    // ==============================================
+    // SEÇÃO 6: FUNÇÕES DE LOCALIZAÇÃO
+    // ==============================================
 
     // Obtém localização do usuário
     const obterLocalizacaoUsuario = async () => {
@@ -362,7 +382,7 @@ function Cadastro() {
         setLocalizacaoError(errorMessage);
 
         if (!userCoords) {
-            setUserCoords([-23.5505, -46.6333]);
+            setUserCoords([-23.5505, -46.6333]); // Coordenadas padrão (São Paulo)
             setMostrarMapa(true);
         }
     };
@@ -377,177 +397,148 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
-    // Adiciona foto ao estado
-    /*const adicionarFoto = (tipo, fotoFile) => {
-        if (!fotoFile) {
-            console.error(`Nenhum arquivo recebido para: ${tipo}`);
-            return;
-        }
+    // ==============================================
+    // SEÇÃO 7: FUNÇÕES DE DADOS
+    // ==============================================
 
-        if (!(fotoFile instanceof File)) {
-            console.error(`Tipo de arquivo inválido para: ${tipo}`, fotoFile);
-            alert(`O arquivo para ${tipo} não é válido`);
-            return;
-        }
+    // Busca postes cadastrados na API
+    const fetchPostesCadastrados = async () => {
+        try {
+            const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
-        if (fotoFile.size > 5 * 1024 * 1024) {
-            alert('A foto é muito grande (máximo 5MB)');
-            return;
-        }
+            const postesProcessados = response.data.data.map(poste => {
+                const coords = poste.coords ||
+                    (poste.latitude && poste.longitude ?
+                        [poste.latitude, poste.longitude] :
+                        null);
 
-        // Verifica tipo de imagem
-        if (!fotoFile.type.startsWith('image/')) {
-            alert('Por favor, envie apenas imagens');
-            return;
-        }
+                return {
+                    ...poste,
+                    coords: coords ? coords.map(Number) : null
+                };
+            });
 
-        setFotos(prev => [
-            ...prev.filter(f => f.tipo !== tipo),
-            {
-                arquivo: fotoFile,
-                tipo: tipo,
-                coords: userCoords,
-                id: `${tipo}-${Date.now()}`,
-                nome: tipo === TIPOS_FOTO.PANORAMICA ? 'Panorâmica' :
-                    tipo === TIPOS_FOTO.LUMINARIA ? 'Luminária' :
-                        tipo === TIPOS_FOTO.TELECOM ? 'Telecom' :
-                            '2° Tipo Luminária'
+            const postesValidos = postesProcessados.filter(poste =>
+                poste.coords &&
+                !isNaN(poste.coords[0]) &&
+                !isNaN(poste.coords[1])
+            );
+
+            setPostesCadastrados(postesValidos);
+            return postesValidos;
+        } catch (error) {
+            console.error("Erro ao buscar postes:", error);
+            if (error.response?.status === 401) {
+                handleLogout();
             }
-        ]);
+            return [];
+        }
     };
 
-    // Handlers para fotos
-    const handleFotoPanoramica = (fotoFile) => adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
-    const handleFotoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
-    const handleFotoArvore = (fotoFile) => adicionarFoto(TIPOS_FOTO.ARVORE, fotoFile);
-    const handleFotoTelecon = (fotoFile) => adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
-    const handleFoto2TipoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
+    // ==============================================
+    // SEÇÃO 8: FUNÇÕES DE FOTOS
+    // ==============================================
 
-    // Verifica fotos obrigatórias
-    const verificarFotos = () => {
-        const fotosObrigatorias = [
-            { tipo: TIPOS_FOTO.PANORAMICA, nome: "Panorâmica" },
-            { tipo: TIPOS_FOTO.LUMINARIA, nome: "Luminária" }
-        ];
+    // Comprime imagem para reduzir tamanho (especialmente útil para mobile)
+    const comprimirImagem = (file, maxWidth = 1024, quality = 0.7) => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const scale = maxWidth / img.width;
 
-        const fotosPresentes = fotos.map(f => f.tipo);
-        const fotosFaltantes = fotosObrigatorias.filter(
-            foto => !fotosPresentes.includes(foto.tipo)
-        );
+                    canvas.width = maxWidth;
+                    canvas.height = img.height * scale;
 
-        if (fotosFaltantes.length > 0) {
-            const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(f => `- ${f.nome}`).join('\n')}`;
-            console.error(mensagem);
-            alert(mensagem);
-            return false;
-        }
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        return true;
-    };*/
-
-    // Adiciona foto ao estado (versão melhorada)
-    const adicionarFoto = (tipo, fotoFile) => {
-        return new Promise((resolve, reject) => {
-            // Validações iniciais
-            if (!fotoFile) {
-                const error = `Nenhum arquivo recebido para: ${tipo}`;
-                console.error(error);
-                return reject(new Error(error));
-            }
-
-            if (!(fotoFile instanceof File)) {
-                const error = `Tipo de arquivo inválido para: ${tipo}`;
-                console.error(error, fotoFile);
-                return reject(new Error(error));
-            }
-
-            if (fotoFile.size > 5 * 1024 * 1024) {
-                const error = 'A foto é muito grande (máximo 5MB)';
-                return reject(new Error(error));
-            }
-
-            if (!fotoFile.type.startsWith('image/')) {
-                const error = 'Por favor, envie apenas imagens';
-                return reject(new Error(error));
-            }
-
-            // Atualiza o estado de forma segura
-            setFotos(prev => {
-                const novasFotos = [
-                    ...prev.filter(f => f.tipo !== tipo),
-                    {
-                        arquivo: fotoFile,
-                        tipo: tipo,
-                        coords: userCoords,
-                        id: `${tipo}-${Date.now()}`,
-                        nome: getNomeTipoFoto(tipo)
-                    }
-                ];
-                resolve(novasFotos); // Resolve com o novo estado
-                return novasFotos;
-            });
+                    canvas.toBlob((blob) => {
+                        resolve(new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        }));
+                    }, 'image/jpeg', quality);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
         });
     };
 
-    // Helper para nomes de tipos de foto
-    const getNomeTipoFoto = (tipo) => {
-        const nomes = {
-            [TIPOS_FOTO.PANORAMICA]: 'Panorâmica',
-            [TIPOS_FOTO.LUMINARIA]: 'Luminária',
-            [TIPOS_FOTO.TELECOM]: 'Telecom',
-            [TIPOS_FOTO.ARVORE]: 'Árvore',
-            [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
-        };
-        return nomes[tipo] || 'Desconhecido';
-    };
-
-    // Handlers para fotos (agora assíncronos)
-    const handleFotoPanoramica = async (fotoFile) => {
+    // Adiciona foto ao estado (com compressão para mobile)
+    const adicionarFoto = async (tipo, fotoFile) => {
         try {
-            await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
+            // Validações básicas
+            if (!fotoFile) {
+                throw new Error(`Nenhum arquivo recebido para: ${tipo}`);
+            }
+
+            if (!(fotoFile instanceof File)) {
+                throw new Error(`Tipo de arquivo inválido para: ${tipo}`);
+            }
+
+            if (fotoFile.size > 5 * 1024 * 1024) {
+                throw new Error('A foto é muito grande (máximo 5MB)');
+            }
+
+            if (!fotoFile.type.startsWith('image/')) {
+                throw new Error('Por favor, envie apenas imagens');
+            }
+
+            // Comprime imagem se for maior que 1MB (especialmente útil para mobile)
+            let arquivoFinal = fotoFile;
+            if (fotoFile.size > 1 * 1024 * 1024) {
+                arquivoFinal = await comprimirImagem(fotoFile);
+            }
+
+            // Atualiza estado com a nova foto
+            setFotos(prev => [
+                ...prev.filter(f => f.tipo !== tipo),
+                {
+                    arquivo: arquivoFinal,
+                    tipo: tipo,
+                    coords: userCoords,
+                    id: `${tipo}-${Date.now()}`,
+                    nome: getNomeTipoFoto(tipo)
+                }
+            ]);
+
             return true;
         } catch (error) {
+            console.error(`Erro ao adicionar foto ${tipo}:`, error);
             alert(error.message);
             return false;
         }
+    };
+
+    // Handlers para cada tipo de foto
+    const handleFotoPanoramica = async (fotoFile) => {
+        return await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
     };
 
     const handleFotoLuminaria = async (fotoFile) => {
-        try {
-            await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+        return await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
     };
 
     const handleFotoTelecon = async (fotoFile) => {
-        try {
-            await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+        return await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
     };
 
     const handleFoto2TipoLuminaria = async (fotoFile) => {
-        try {
-            await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+        return await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
     };
 
-    // Verificação robusta de fotos obrigatórias
+    // Verifica fotos obrigatórias
     const verificarFotos = () => {
         const tiposObrigatorios = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
         const nomesObrigatorios = tiposObrigatorios.map(getNomeTipoFoto);
 
-        // Filtra apenas fotos válidas (com arquivo real)
+        // Filtra apenas fotos válidas
         const fotosValidas = fotos.filter(foto =>
             foto.arquivo instanceof File &&
             foto.arquivo.size > 0 &&
@@ -561,12 +552,10 @@ function Cadastro() {
 
         if (fotosFaltantes.length > 0) {
             const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(t => `- ${getNomeTipoFoto(t)}`).join('\n')}`;
-
-            // Melhor feedback visual (substitua por seu sistema de notificação)
             const faltantesStr = fotosFaltantes.map(getNomeTipoFoto).join(', ');
             setErroFotos(`Adicione: ${faltantesStr}`);
 
-            // Rolagem para a primeira foto faltante
+            // Rolagem suave para a primeira foto faltante
             setTimeout(() => {
                 const primeiroTipoFaltante = fotosFaltantes[0];
                 const elemento = document.getElementById(`botao-camera-${primeiroTipoFaltante}`);
@@ -580,42 +569,36 @@ function Cadastro() {
         return true;
     };
 
-    // Calcula distância entre coordenadas
-    const calcularDistancia = (lat1, lon1, lat2, lon2) => {
-        const R = 6371e3; // Raio da Terra em metros
-        const φ1 = lat1 * Math.PI / 180;
-        const φ2 = lat2 * Math.PI / 180;
-        const Δφ = (lat2 - lat1) * Math.PI / 180;
-        const Δλ = (lon2 - lon1) * Math.PI / 180;
+    // ==============================================
+    // SEÇÃO 9: FUNÇÕES DE FORMULÁRIO
+    // ==============================================
 
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return Math.round(R * c);
+    // Handler genérico para campos do formulário
+    const handleFieldChange = (field, value) => {
+        dispatch({ type: 'UPDATE_FIELD', field, value });
     };
 
-    // Logout
+    // Faz logout do usuário
     const handleLogout = () => {
         localStorage.removeItem('token');
         window.location.href = '/login';
     };
 
-    // Salva o cadastro
+    // Salva o cadastro completo
     const handleSalvarCadastro = async () => {
-        // Verifica fotos obrigatórias primeiro
+        // Verifica fotos obrigatórias
         if (!verificarFotos()) return;
 
+        // Verifica coordenadas
         if (!userCoords || userCoords.length < 2) {
             alert("Não foi possível obter coordenadas válidas!");
             return;
         }
 
-        // Lista de campos obrigatórios e seus nomes para exibição
+        // Campos obrigatórios
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
-            { campo: 'endereco', nome: 'Endereço' }, // Alterado de enderecoInput para endereco
+            { campo: 'endereco', nome: 'Endereço' },
             { campo: 'numero', nome: 'Número' },
             { campo: 'cep', nome: 'CEP' },
             { campo: 'transformador', nome: 'Transformador' },
@@ -636,8 +619,10 @@ function Cadastro() {
             return;
         }
 
+        setLoading(true);
+
         try {
-            // Calcula distância se tiver poste anterior
+            // Calcula distância do poste anterior
             let distancia = 0;
             if (posteAnterior && userCoords) {
                 distancia = calcularDistancia(
@@ -651,32 +636,28 @@ function Cadastro() {
 
             const formData = new FormData();
 
-            // Adiciona campos ao formData - agora mapeando enderecoInput para endereco
+            // Adiciona campos ao formData
             Object.entries({
                 ...state,
-                endereco: state.enderecoInput // Mapeia enderecoInput para endereco
+                endereco: state.enderecoInput
             }).forEach(([key, value]) => {
                 if (value !== undefined && value !== null) {
                     formData.append(key, value);
                 }
             });
 
+            // Adiciona dados de localização
             formData.append('coords', JSON.stringify(userCoords));
             formData.append('usuarioId', usuarioId);
             formData.append('isLastPost', isLastPost.toString());
 
-            // Adiciona fotos
+            // Adiciona fotos (já comprimidas se necessário)
             fotos.forEach((foto) => {
                 formData.append('fotos', foto.arquivo);
                 formData.append('tipos', foto.tipo);
             });
 
-            console.log("Dados a serem enviados:", {
-                ...state,
-                endereco: state.enderecoInput,
-                fotos: fotos.map(f => f.tipo)
-            });
-
+            // Envia para a API
             const response = await axios.post(
                 'https://backendalesandro-production.up.railway.app/api/postes',
                 formData,
@@ -685,7 +666,7 @@ function Cadastro() {
                         'Content-Type': 'multipart/form-data',
                         Authorization: `Bearer ${token}`
                     },
-                    timeout: 10000
+                    timeout: 30000 // Tempo maior para mobile
                 }
             );
 
@@ -714,16 +695,13 @@ function Cadastro() {
             } else {
                 alert(error.response?.data?.message || 'Erro ao cadastrar. Tente novamente.');
             }
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Handler genérico para campos do formulário
-    const handleFieldChange = (field, value) => {
-        dispatch({ type: 'UPDATE_FIELD', field, value });
-    };
-
     // ==============================================
-    // SEÇÃO 5: RENDERIZAÇÃO
+    // SEÇÃO 10: RENDERIZAÇÃO
     // ==============================================
 
     return (
@@ -741,8 +719,8 @@ function Cadastro() {
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={obterLocalizacaoUsuario}
-                                disabled={isLoadingLocation}
-                                className={`px-4 py-2 rounded-md text-white ${isLoadingLocation ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                disabled={isLoadingLocation || loading}
+                                className={`px-4 py-2 rounded-md text-white ${isLoadingLocation ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 {isLoadingLocation ? 'Obtendo localização...' : 'Obter Localização'}
                             </button>
@@ -750,7 +728,8 @@ function Cadastro() {
                             {userCoords && (
                                 <button
                                     onClick={() => setMostrarMapa(!mostrarMapa)}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                                    disabled={loading}
+                                    className={`px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     {mostrarMapa ? 'Ocultar Mapa' : 'Mostrar Mapa'}
                                 </button>
@@ -774,7 +753,8 @@ function Cadastro() {
                             <div id="mapa" className="h-96 w-full rounded-lg border border-gray-300"></div>
                             <button
                                 onClick={fecharMapa}
-                                className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                disabled={loading}
+                                className={`mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 Fechar Mapa
                             </button>
@@ -820,7 +800,7 @@ function Cadastro() {
                                 value={state.enderecoInput}
                                 onChange={(e) => {
                                     dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
-                                    dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value }); // Atualiza ambos
+                                    dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
                                 }}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -852,76 +832,78 @@ function Cadastro() {
 
                     {/* Seção de Fotos */}
                     <div className="mb-6">
-                        <h2 className="text-xl font-bold mb-4 text-center">Captura de Fotos</h2>
-                        <hr className="my-4 border-t-2 border-gray-300" />
+                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">
+                            Fotos Obrigatórias
+                        </h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Foto Panorâmica (obrigatória) */}
-                            <div className="space-y-2">
-                                <div className="flex justify-center">
-                                    <BotaoCamera
-                                        label="Foto Panorâmica"
-                                        onFotoCapturada={handleFotoPanoramica}
-                                        obrigatorio={true}
-                                        erro={erroFotos?.includes('Panorâmica')}
-                                    />
-                                </div>
-                                <p className="text-sm text-center font-bold text-gray-500">
-                                    FOTO PANORÂMICA <span className="text-red-500">*</span>
-                                </p>
-                            </div>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            {/* Foto da Luminária (obrigatória) */}
-                            <div className="space-y-2">
-                                <div className="flex justify-center">
-                                    <BotaoCamera
-                                        label="Foto da Luminária"
-                                        onFotoCapturada={handleFotoLuminaria}
-                                        obrigatorio={true}
-                                        erro={erroFotos?.includes('Luminária')}
-                                    />
-                                </div>
-                                <p className="text-sm text-center font-bold text-gray-500">
-                                    FOTO LUMINÁRIA <span className="text-red-500">*</span>
-                                </p>
-                            </div>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            {/* Foto Telecon (opcional) */}
-                            <div className="space-y-2">
-                                <div className="flex justify-center">
-                                    <BotaoCamera
-                                        label="Foto Telecom (opcional)"
-                                        onFotoCapturada={handleFotoTelecon}
-                                        obrigatorio={false}
-                                    />
-                                </div>
-                                <p className="text-sm text-center font-bold text-gray-500">
-                                    FOTO TELECOM
-                                </p>
-                            </div>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            {/* 2° Tipo de lâmpada (opcional) */}
-                            <div className="space-y-2">
-                                <div className="flex justify-center">
-                                    <BotaoCamera
-                                        label="2° Tipo de lâmpada (opcional)"
-                                        onFotoCapturada={handleFoto2TipoLuminaria}
-                                        obrigatorio={false}
-                                    />
-                                </div>
-                                <p className="text-sm text-center font-bold text-gray-500">
-                                    FOTO 2° TIPO LUMINÁRIA
-                                </p>
-                            </div>
+                        {/* Foto Panorâmica */}
+                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                            <BotaoCamera
+                                id="botao-camera-PANORAMICA"
+                                label="Foto Panorâmica"
+                                onFotoCapturada={handleFotoPanoramica}
+                                obrigatorio={true}
+                                disabled={loading}
+                                erro={erroFotos?.includes('Panorâmica')}
+                            />
+                            <p className="text-center text-sm mt-2 font-medium">
+                                PANORÂMICA <span className="text-red-500">*</span>
+                                {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) && (
+                                    <span className="text-green-500 ml-2">✓</span>
+                                )}
+                            </p>
                         </div>
 
-                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+                        {/* Foto da Luminária */}
+                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                            <BotaoCamera
+                                id="botao-camera-LUMINARIA"
+                                label="Foto da Luminária"
+                                onFotoCapturada={handleFotoLuminaria}
+                                obrigatorio={true}
+                                disabled={loading}
+                                erro={erroFotos?.includes('Luminária')}
+                            />
+                            <p className="text-center text-sm mt-2 font-medium">
+                                LUMINÁRIA <span className="text-red-500">*</span>
+                                {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) && (
+                                    <span className="text-green-500 ml-2">✓</span>
+                                )}
+                            </p>
+                        </div>
+
+                        {/* Fotos Opcionais */}
+                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-300 text-center mt-6">
+                            Fotos Opcionais
+                        </h2>
+
+                        {/* Foto Telecom */}
+                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                            <BotaoCamera
+                                id="botao-camera-TELECOM"
+                                label="Foto Telecom (opcional)"
+                                onFotoCapturada={handleFotoTelecon}
+                                obrigatorio={false}
+                                disabled={loading}
+                            />
+                            <p className="text-center text-sm mt-2 font-medium text-gray-600">
+                                TELECOM
+                            </p>
+                        </div>
+
+                        {/* 2° Tipo de Luminária */}
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                            <BotaoCamera
+                                id="botao-camera-LAMPADA"
+                                label="2° Tipo de Luminária (opcional)"
+                                onFotoCapturada={handleFoto2TipoLuminaria}
+                                obrigatorio={false}
+                                disabled={loading}
+                            />
+                            <p className="text-center text-sm mt-2 font-medium text-gray-600">
+                                2° TIPO LUMINÁRIA
+                            </p>
+                        </div>
 
                         {/* Mensagem de validação */}
                         <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
@@ -929,11 +911,12 @@ function Cadastro() {
                         </div>
                     </div>
 
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
                     {/* Seção de Características Técnicas */}
                     <div className="mb-6">
-                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">Dados da Postiação</h2>
+                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">
+                            Dados da Postiação
+                        </h2>
+
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -1324,9 +1307,13 @@ function Cadastro() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div >
         </div>
+
     );
 }
 
 export default Cadastro;
+
+
+

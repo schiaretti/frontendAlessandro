@@ -1,199 +1,143 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-const BotaoCamera = ({ label, onFotoCapturada, obrigatorio = false }) => {
+const BotaoCamera = ({ label, onFotoCapturada, obrigatorio, erro, id }) => {
   const [capturedImage, setCapturedImage] = useState(null);
-  const [fotoCapturada, setFotoCapturada] = useState(false);
-  const [error, setError] = useState(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const videoRef = useRef(null);
   const fileInputRef = useRef(null);
 
   // Detecta se é mobile
-  const isMobile = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Processa a foto de forma consistente
-  const processarFoto = async (file) => {
+  // Limpeza ao desmontar
+  useEffect(() => {
+    return () => {
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Método universal para abrir câmera
+  const abrirCamera = async () => {
     try {
-      // Correção crucial para mobile - garante que o arquivo tenha nome e tipo
-      if (isMobile() && (!file.name || !file.type)) {
-        file = new File([file], `foto-${Date.now()}.jpg`, {
-          type: 'image/jpeg'
+      // Tenta acessar a câmera diretamente (PC e alguns mobiles)
+      if (!isMobile() && navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment' }
         });
-      }
-
-      // Cria URL para preview
-      const imageUrl = URL.createObjectURL(file);
-      setCapturedImage(imageUrl);
-      setFotoCapturada(true);
-      
-      // Chama callback após pequeno delay no mobile
-      if (isMobile()) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      onFotoCapturada(file);
-    } catch (err) {
-      console.error('Erro ao processar foto:', err);
-      setError('Erro ao processar a foto');
-    }
-  };
-
-  // Abre a câmera de forma apropriada para cada dispositivo
-  const abrirCamera = () => {
-    setError(null);
-    
-    if (isMobile()) {
-      // Método otimizado para mobile
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      
-      input.onchange = async (e) => {
-        if (e.target.files && e.target.files[0]) {
-          await processarFoto(e.target.files[0]);
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          setIsCameraActive(true);
         }
-      };
-      
-      input.click();
-    } else {
-      // Método para desktop
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        // Usa webcam se disponível
-        navigator.mediaDevices.getUserMedia({ video: true })
-          .then(stream => {
-            // Implementação da captura via webcam...
-          })
-          .catch(() => {
-            // Fallback para input de arquivo simples
-            fileInputRef.current.click();
-          });
       } else {
-        // Fallback para todos os casos
-        fileInputRef.current.click();
+        // Fallback para input file com capture (mobile)
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.capture = 'environment';
+        
+        input.onchange = (e) => processarFoto(e.target.files[0]);
+        input.click();
       }
+    } catch (err) {
+      console.error('Erro ao acessar câmera:', err);
+      // Fallback final - input file simples
+      fileInputRef.current.click();
     }
   };
 
-  // Limpeza
-  const resetarCamera = () => {
-    if (capturedImage) {
-      URL.revokeObjectURL(capturedImage);
+  // Captura foto da webcam (PC)
+  const capturarFoto = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+    
+    canvas.toBlob(blob => {
+      const file = new File([blob], `foto-${Date.now()}.jpg`, {
+        type: 'image/jpeg'
+      });
+      processarFoto(file);
+      setIsCameraActive(false);
+    }, 'image/jpeg', 0.9);
+  };
+
+  // Processa a foto capturada
+  const processarFoto = (file) => {
+    if (!file) return;
+
+    // Normalização para mobile
+    if (isMobile() && (!file.name || !file.type)) {
+      file = new File([file], `foto-${Date.now()}.jpg`, {
+        type: 'image/jpeg'
+      });
     }
-    setCapturedImage(null);
-    setFotoCapturada(false);
+
+    const imageUrl = URL.createObjectURL(file);
+    setCapturedImage(imageUrl);
+    onFotoCapturada(file);
   };
 
   return (
-    <div className={`camera-container ${obrigatorio && !fotoCapturada ? 'campo-obrigatorio' : ''}`}>
-      <label className="camera-label">
-        {label} {obrigatorio && <span className="obrigatorio-asterisco">*</span>}
-      </label>
-      
-      {error && <div className="camera-error">{error}</div>}
-      
-      {capturedImage ? (
-        <div className="camera-preview-container">
-          <img 
-            src={capturedImage} 
-            alt="Pré-visualização" 
-            className="camera-preview"
-            onLoad={() => {
-              // Força atualização no mobile se necessário
-              if (isMobile()) setCapturedImage(prev => prev ? prev + '?' + Date.now() : prev);
-            }}
-          />
-          <button onClick={resetarCamera} className="camera-btn camera-btn-retry">
-            Tirar Novamente
+    <div className={`camera-container ${erro ? 'border-red-500 border-2' : ''}`}>
+      {!isCameraActive ? (
+        !capturedImage ? (
+          <button
+            id={id}
+            onClick={abrirCamera}
+            className="bg-blue-500 text-white py-2 px-4 rounded flex items-center"
+          >
+            <CameraIcon />
+            {label} {obrigatorio && '*'}
+          </button>
+        ) : (
+          <div className="flex flex-col items-center">
+            <img src={capturedImage} alt="Preview" className="max-h-40 mb-2" />
+            <button
+              onClick={() => setCapturedImage(null)}
+              className="bg-red-500 text-white py-1 px-3 rounded text-sm"
+            >
+              Refazer
+            </button>
+          </div>
+        )
+      ) : (
+        <div className="camera-preview">
+          <video ref={videoRef} autoPlay playsInline className="w-full" />
+          <button
+            onClick={capturarFoto}
+            className="bg-white rounded-full p-2 absolute bottom-4 left-1/2 transform -translate-x-1/2"
+          >
+            <CaptureIcon />
           </button>
         </div>
-      ) : (
-        <button onClick={abrirCamera} className="camera-btn camera-btn-open">
-          Abrir Câmera
-        </button>
       )}
-      
-      <input 
+
+      <input
         type="file"
         ref={fileInputRef}
         accept="image/*"
-        style={{ display: 'none' }}
-        onChange={async (e) => {
-          if (e.target.files && e.target.files[0]) {
-            await processarFoto(e.target.files[0]);
-          }
-        }}
+        onChange={(e) => processarFoto(e.target.files[0])}
+        className="hidden"
       />
     </div>
   );
 };
 
-// Estilos (adicione ao seu CSS)
-const styles = `
-  .camera-container {
-    margin: 1rem 0;
-    position: relative;
-  }
-  
-  .campo-obrigatorio {
-    border: 2px solid #ff0000;
-    border-radius: 8px;
-    padding: 8px;
-  }
-  
-  .camera-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-  }
-  
-  .obrigatorio-asterisco {
-    color: #ff0000;
-  }
-  
-  .camera-error {
-    color: #ff0000;
-    font-size: 14px;
-    margin: 8px 0;
-  }
-  
-  .camera-preview-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .camera-preview {
-    max-width: 100%;
-    max-height: 300px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-  }
-  
-  .camera-btn {
-    padding: 10px 15px;
-    border: none;
-    border-radius: 8px;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-  
-  .camera-btn-open {
-    background: #2196F3;
-    color: white;
-  }
-  
-  .camera-btn-retry {
-    background: #f44336;
-    color: white;
-  }
-`;
+// Componentes auxiliares
+const CameraIcon = () => (
+  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
 
-// Adiciona estilos ao documento
-const styleSheet = document.createElement("style");
-styleSheet.innerText = styles;
-document.head.appendChild(styleSheet);
+const CaptureIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
 
 export default BotaoCamera;

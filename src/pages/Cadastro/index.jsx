@@ -17,7 +17,8 @@ const TIPOS_FOTO = {
     LUMINARIA: 'LUMINARIA',
     ARVORE: 'ARVORE',
     TELECOM: 'TELECOM',
-    LAMPADA: 'LAMPADA'
+    LAMPADA: 'LAMPADA',
+
 };
 
 // Reducer para gerenciar o estado do formulário
@@ -227,7 +228,7 @@ function Cadastro() {
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
-            maxClusterRadius: 40,
+            maxClusterRadius: 0,
             iconCreateFunction: function (cluster) {
                 return L.divIcon({
                     html: `
@@ -281,7 +282,7 @@ function Cadastro() {
             const marker = L.marker(coords, {
                 icon: L.divIcon({
                     html: `
-                    <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
+                    <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>
                 `,
                     iconSize: [10, 10], // Tamanho reduzido
                     className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
@@ -415,37 +416,6 @@ function Cadastro() {
         ]);
     };
 
-   /* // Handlers para fotos
-    const handleFotoPanoramica = (fotoFile) => adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
-    const handleFotoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
-    const handleFotoArvore = (fotoFile) => adicionarFoto(TIPOS_FOTO.ARVORE, fotoFile);
-    const handleFotoTelecon = (fotoFile) => adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
-    const handleFoto2TipoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);*/
-
-    // Verifica fotos obrigatórias
-   /* const verificarFotos = () => {
-        const fotosObrigatorias = [
-            { tipo: TIPOS_FOTO.PANORAMICA, nome: "Panorâmica" },
-            { tipo: TIPOS_FOTO.LUMINARIA, nome: "Luminária" }
-        ];
-
-        const fotosPresentes = fotos.map(f => f.tipo);
-        const fotosFaltantes = fotosObrigatorias.filter(
-            foto => !fotosPresentes.includes(foto.tipo)
-        );
-
-        if (fotosFaltantes.length > 0) {
-            const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(f => `- ${f.nome}`).join('\n')}`;
-            console.error(mensagem);
-            alert(mensagem);
-            return false;
-        }
-
-        return true;
-    };*/
-
- 
-
     // Helper para nomes de tipos de foto
     const getNomeTipoFoto = (tipo) => {
         const nomes = {
@@ -454,6 +424,7 @@ function Cadastro() {
             [TIPOS_FOTO.TELECOM]: 'Telecom',
             [TIPOS_FOTO.ARVORE]: 'Árvore',
             [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
+
         };
         return nomes[tipo] || 'Desconhecido';
     };
@@ -809,488 +780,546 @@ function Cadastro() {
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">BAIRRO</label>
+                            <input
+                                type="text"
+                                value={state.localizacao}
+                                onChange={(e) => handleFieldChange('localizacao', e.target.value)}
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <ComboBox
+                            label="Selecione:"
+                            options={[
+                                { value: "Em frente", label: "Em frente" },
+                                { value: "Sem número", label: "Sem número" },
+                                { value: "Em frente ao oposto", label: "Em frente ao oposto" },
+                               
+                            ]}
+                            onChange={(value) => handleFieldChange('especieArvore', value)}
+                        />
+
                     </div>
 
                     {/* Seção de Fotos */}
-                        {/* Foto Panorâmica */}
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                            <BotaoCamera
-                                id="foto-panoramica"
-                                label="Foto Panorâmica"
-                                onFotoCapturada={(file) => {
-                                    console.log('Arquivo recebido (Panorâmica):', file);
-                                    adicionarFoto(TIPOS_FOTO.PANORAMICA, file);
-                                }}
-                                obrigatorio={true}
-                                erro={erroFotos?.includes('Panorâmica')}
-                            />
-                            <p className="text-center text-sm mt-2 font-medium">
-                                PANORÂMICA <span className="text-red-500">*</span>
-                                {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) && (
-                                    <span className="text-green-500 ml-2">✓</span>
-                                )}
-                            </p>
-                        </div>
 
-                        {/* Foto da Luminária */}
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                            <BotaoCamera
-                                id="foto-luminaria"
-                                label="Foto da Luminária"
-                                onFotoCapturada={(file) => {
-                                    console.log('Arquivo recebido (Luminária):', file);
-                                    adicionarFoto(TIPOS_FOTO.LUMINARIA, file);
-                                }}
-                                obrigatorio={true}
-                                erro={erroFotos?.includes('Luminária')}
-                            />
-                            <p className="text-center text-sm mt-2 font-medium">
-                                LUMINÁRIA <span className="text-red-500">*</span>
-                                {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) && (
-                                    <span className="text-green-500 ml-2">✓</span>
-                                )}
-                            </p>
-                        </div>
-                    
+                    {/* Foto Panorâmica */}
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <BotaoCamera
+                            id="foto-panoramica"
+                            label="Foto Panorâmica"
+                            onFotoCapturada={(file) => {
+                                console.log('Arquivo recebido (Panorâmica):', file);
+                                adicionarFoto(TIPOS_FOTO.PANORAMICA, file);
+                            }}
+                            obrigatorio={true}
+                            erro={erroFotos?.includes('Panorâmica')}
+                        />
+                        <p className="text-center text-sm mt-2 font-medium">
+                            PANORÂMICA <span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) && (
+                                <span className="text-green-500 ml-2">✓</span>
+                            )}
+                        </p>
+                    </div>
+
+                    {/* Foto da Luminária */}
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <BotaoCamera
+                            id="foto-luminaria"
+                            label="Foto da Luminária"
+                            onFotoCapturada={(file) => {
+                                console.log('Arquivo recebido (Luminária):', file);
+                                adicionarFoto(TIPOS_FOTO.LUMINARIA, file);
+                            }}
+                            obrigatorio={true}
+                            erro={erroFotos?.includes('Luminária')}
+                        />
+                        <p className="text-center text-sm mt-2 font-medium">
+                            LUMINÁRIA <span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) && (
+                                <span className="text-green-500 ml-2">✓</span>
+                            )}
+                        </p>
+                    </div>
+
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* Foto Telecon (opcional) */}
-                    <div className="space-y-2">
-                        <div className="flex justify-center">
-                            <BotaoCamera
-                                label="Foto Telecom (opcional)"
-                                onFotoCapturada={handleFotoTelecon}
-                                obrigatorio={false}
-                            />
-                        </div>
-                        <p className="text-sm text-center font-bold text-gray-500">
-                            FOTO TELECOM
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <BotaoCamera
+                            id="foto-telecom"
+                            label="Foto Telecom ( Opcional )"
+                            onFotoCapturada={(file) => {
+                                console.log('Arquivo recebido (Telecom):', file);
+                                adicionarFoto(TIPOS_FOTO.TELECOM, file);
+                            }}
+                            obrigatorio={false}
+                            erro={erroFotos?.includes('Telecom')}
+                        />
+                        <p className="text-center text-sm mt-2 font-medium">
+                            TELECOM <span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.TELECOM) && (
+                                <span className="text-green-500 ml-2">✓</span>
+                            )}
                         </p>
+
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* 2° Tipo de lâmpada (opcional) */}
-                    <div className="space-y-2">
-                        <div className="flex justify-center">
-                            <BotaoCamera
-                                label="2° Tipo de lâmpada (opcional)"
-                                onFotoCapturada={handleFoto2TipoLuminaria}
-                                obrigatorio={false}
-                            />
-                        </div>
-                        <p className="text-sm text-center font-bold text-gray-500">
-                            FOTO 2° TIPO LUMINÁRIA
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <BotaoCamera
+                            id="foto-Lampada"
+                            label="Foto Lâmpada ( Opcional )"
+                            onFotoCapturada={(file) => {
+                                console.log('Arquivo recebido (Lampada):', file);
+                                adicionarFoto(TIPOS_FOTO.LAMPADA, file);
+                            }}
+                            obrigatorio={false}
+                            erro={erroFotos?.includes('Lampada')}
+                        />
+
+                        <p className="text-center text-sm mt-2 font-medium">
+                            LAMPADA <span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADAS) && (
+                                <span className="text-green-500 ml-2">✓</span>
+                            )}
+                        </p>
+
+                    </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <BotaoArvore
+                            id="foto-arvore"
+                            label="Foto da Árvore ( Opcional )"
+                            onFotoCapturada={(file) => {
+                                console.log('Arquivo recebido (Árvore):', file);
+                                adicionarFoto(TIPOS_FOTO.ARVORE, file);
+                            }}
+                            obrigatorio={false}
+                            erro={erroFotos?.includes('Árvore')}
+                            userCoords={userCoords}
+                        />
+                        <p className="text-center text-sm mt-2 font-medium">
+                            ÁRVORE <span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.ARVORE) && (
+                                <span className="text-green-500 ml-2">✓</span>
+                            )}
                         </p>
                     </div>
-                
-
-                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                {/* Mensagem de validação */}
-                <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
-                    <p>Fotos marcadas com <span className="font-bold">*</span> são obrigatórias</p>
-                </div>
-            </div>
-
-            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-            {/* Seção de Características Técnicas */}
-            <div className="mb-6">
-                <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">Dados da Postiação</h2>
-                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                    <ComboBox
-                        label="Poste com Transformador?"
-                        options={[
-                            { value: "Sim", label: "Sim" },
-                            { value: "Não", label: "Não" },
-                        ]}
-                        onChange={(value) => handleFieldChange('transformador', value)}
-                    />
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                    <ComboBox
-                        label="Poste com medição?"
-                        options={[
-                            { value: "Sim", label: "Sim" },
-                            { value: "Não", label: "Não" },
-                        ]}
-                        onChange={(value) => handleFieldChange('medicao', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Poste com telecom?"
-                        options={[
-                            { value: "Sim", label: "Sim" },
-                            { value: "Não", label: "Não" },
-                        ]}
-                        onChange={(value) => handleFieldChange('telecom', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Poste com concentrador?"
-                        options={[
-                            { value: "Sim", label: "Sim" },
-                            { value: "Não", label: "Não" },
-                        ]}
-                        onChange={(value) => handleFieldChange('concentrador', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Poste de:"
-                        options={[
-                            { value: "Circular concreto", label: "Circular concreto" },
-                            { value: "Madeira", label: "Madeira" },
-                            { value: "Concreto DT", label: "Concreto DT" },
-                            { value: "Circular metal", label: "Circular metal" },
-                            { value: "Ornamental", label: "Ornamental" },
-                            { value: "Circular fibra", label: "Circular fibra" },
-                            { value: "Desconhecido", label: "Desconhecido" },
-                        ]}
-                        onChange={(value) => handleFieldChange('poste', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Altura do poste?"
-                        options={[
-                            { value: "5", label: "5" },
-                            { value: "6", label: "6" },
-                            { value: "7", label: "7" },
-                            { value: "8", label: "8" },
-                            { value: "9", label: "9" },
-                            { value: "10", label: "10" },
-                            { value: "11", label: "11" },
-                            { value: "12", label: "12" },
-                            { value: "13", label: "13" },
-                            { value: "14", label: "14" },
-                            { value: "15", label: "15" },
-                            { value: "16", label: "16" },
-                            { value: "17", label: "17" },
-                            { value: "18", label: "18" },
-                        ]}
-                        onChange={(value) => handleFieldChange('alturaposte', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Estrutura da postiação ?"
-                        options={[
-                            { value: "Unilateral", label: "Unilateral" },
-                            { value: "Bilateral", label: "Bilateral" },
-                            { value: "Canteiro central", label: "Canteiro central" },
-                            { value: "Praça", label: "Praça" },
-                            { value: "Em frente ao oposto", label: "Em frente ao oposto" },
-                        ]}
-                        onChange={(value) => handleFieldChange('estruturaposte', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Selecione o tipo do braço ?"
-                        options={[
-                            { value: "Braço Curto", label: "Braço Curto" },
-                            { value: "Braço Médio", label: "Braço Médio" },
-                            { value: "Braço Longo", label: "Braço Longo" },
-                            { value: "Level 1", label: "Level 1" },
-                            { value: "Level 2", label: "Level 2" },
-                            { value: "Suporte com 1", label: "Suporte com 1" },
-                            { value: "Suporte com 2", label: "Suporte com 2" },
-                            { value: "Suporte com 3", label: "Suporte com 3" },
-                            { value: "Suporte com 4", label: "Suporte com 4" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoBraco', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tamanho do Braço ?"
-                        options={[
-                            { value: "0.50", label: "0.50" },
-                            { value: "1.20", label: "1.20" },
-                            { value: "2.20", label: "2.20" },
-                            { value: "3.20", label: "3.20" },
-                            { value: "4.20", label: "4.20" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tamanhoBraco', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Quantidade de Pontos ?"
-                        options={[
-                            { value: "1", label: "1" },
-                            { value: "2", label: "2" },
-                            { value: "3", label: "3" },
-                            { value: "4", label: "4" },
-                        ]}
-                        onChange={(value) => handleFieldChange('quantidadePontos', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo da Lâmpada ?"
-                        options={[
-                            { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
-                            { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
-                            { value: "Mista", label: "Mista" },
-                            { value: "Led", label: "Led" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoLampada', value)} />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Potência da lâmpada ?"
-                        options={[
-                            { value: "70 W", label: "70 W" },
-                            { value: "80 W", label: "80 W" },
-                            { value: "100 W", label: "100 W" },
-                            { value: "125 W", label: "125 W" },
-                            { value: "150 W", label: "150 W" },
-                            { value: "250 W", label: "250 W" },
-                            { value: "400 W", label: "400 W" },
-                        ]}
-                        onChange={(value) => handleFieldChange('potenciaLampada', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo do Reator ?"
-                        options={[
-                            { value: "Reator Externo", label: "Reator Externo" },
-                            { value: "Reator Integrado", label: "Reator Integrado" },
-                            { value: "Módulo", label: "Módulo" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoReator', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de Comando ?"
-                        options={[
-                            { value: "Individual", label: "Individual" },
-                            { value: "Coletivo", label: "Coletivo" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoComando', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de Rede ?"
-                        options={[
-                            { value: "Aérea BT", label: "Aérea BT" },
-                            { value: "Convencional", label: "Convencional" },
-                            { value: "Subterrânea", label: "Subterrânea" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoRede', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de Cabo ?"
-                        options={[
-                            { value: "Alumínio Nú", label: "Alumínio Nú" },
-                            { value: "Alumínio isolado XLPE", label: "Alumínio isolado XLPE" },
-                            { value: "Multiplexado", label: "Multiplexado" },
-                            { value: "Cobre Nú", label: "Cobre Nú" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoCabo', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Número de fases ?"
-                        options={[
-                            { value: "Monofásico", label: "Monofásico" },
-                            { value: "Bifásico", label: "Bifásico" },
-                            { value: "Trifásico", label: "Trifásico" },
-                        ]}
-                        onChange={(value) => handleFieldChange('numeroFases', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <h2 className="col-span-1 md:col-span-2 text-lg font-semibold text-center bg-gray-200 p-2 rounded-md">
-                        Informações da via
-                    </h2>
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de Via ?"
-                        options={[
-                            { value: "Via Rápida", label: "Via Rápida" },
-                            { value: "Via Local", label: "Via Local" },
-                            { value: "Via Arterial", label: "Via Arterial" },
-                            { value: "Via Coletora", label: "Via Coletora" },
-                            { value: "Via Rural", label: "Via Rural" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoVia', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Hierarquia de Via ?"
-                        options={[
-                            { value: "Acesso", label: "Acesso" },
-                            { value: "Alameda", label: "Alameda" },
-                            { value: "Avenida", label: "Avenida" },
-                            { value: "Estrada", label: "Estrada" },
-                            { value: "LMG", label: "LMG" },
-                            { value: "Rua", label: "Rua" },
-                            { value: "Travessa", label: "Travessa" },
-                            { value: "Viaduto", label: "Viaduto" },
-                        ]}
-                        onChange={(value) => handleFieldChange('hierarquiaVia', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de pavimento ?"
-                        options={[
-                            { value: "Asfalto", label: "Asfalto" },
-                            { value: "Paralelepipedo", label: "Paralelepipedo" },
-                            { value: "Terra", label: "Terra" },
-                            { value: "Bloquete", label: "Bloquete" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoPavimento', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Quantidade de faixas ?"
-                        options={[
-                            { value: "1", label: "1" },
-                            { value: "2", label: "2" },
-                            { value: "3", label: "3" },
-                            { value: "4", label: "4" },
-                            { value: "5", label: "5" },
-                            { value: "6", label: "6" },
-                        ]}
-                        onChange={(value) => handleFieldChange('quantidadeFaixas', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Tipo de Passeio ?"
-                        options={[
-                            { value: "Concreto", label: "Concreto" },
-                            { value: "Pedra", label: "Pedra" },
-                            { value: "Terra", label: "Terra" },
-                            { value: "Bloquete", label: "Bloquete" },
-                            { value: "Cerâmico", label: "Cerâmico" },
-                        ]}
-                        onChange={(value) => handleFieldChange('tipoPasseio', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <ComboBox
-                        label="Canteiro central existente ?"
-                        options={[
-                            { value: "Sim", label: "Sim" },
-                            { value: "Não", label: "Não" },
-                        ]}
-                        onChange={(value) => handleFieldChange('canteiroCentral', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <div className="col-span-1 md:col-span-2 mb-4 text-center">
-                        <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
-                        <input
-                            placeholder="Em Metros"
-                            type="text"
-                            className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        />
+                    {/* Mensagem de validação */}
+                    <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
+                        <p>Fotos marcadas com <span className="font-bold">*</span> são obrigatórias</p>
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                    <div className="col-span-1 md:col-span-2 text-center">
-                        <label className="mb-4 text-gray-700 font-extrabold">Distância entre postes</label>
-                        <input
-                            placeholder="Em Metros (calculado automaticamente)"
-                            type="text"
-                            value={state.distanciaEntrePostes}
-                            readOnly
-                            className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
+                    {/* Seção de Características Técnicas */}
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">Dados da Postiação</h2>
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Poste com Transformador?"
+                            options={[
+                                { value: "Sim", label: "Sim" },
+                                { value: "Não", label: "Não" },
+                            ]}
+                            onChange={(value) => handleFieldChange('transformador', value)}
                         />
-                        <small className="text-gray-500">
-                            {state.distanciaEntrePostes ?
-                                "Distância calculada automaticamente do poste anterior" :
-                                "Será calculado após o próximo poste"}
-                        </small>
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Poste com medição?"
+                            options={[
+                                { value: "Sim", label: "Sim" },
+                                { value: "Não", label: "Não" },
+                            ]}
+                            onChange={(value) => handleFieldChange('medicao', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Poste com telecom?"
+                            options={[
+                                { value: "Sim", label: "Sim" },
+                                { value: "Não", label: "Não" },
+                            ]}
+                            onChange={(value) => handleFieldChange('telecom', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Poste com concentrador?"
+                            options={[
+                                { value: "Sim", label: "Sim" },
+                                { value: "Não", label: "Não" },
+                            ]}
+                            onChange={(value) => handleFieldChange('concentrador', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Poste de:"
+                            options={[
+                                { value: "Circular concreto", label: "Circular concreto" },
+                                { value: "Madeira", label: "Madeira" },
+                                { value: "Concreto DT", label: "Concreto DT" },
+                                { value: "Circular metal", label: "Circular metal" },
+                                { value: "Ornamental", label: "Ornamental" },
+                                { value: "Circular fibra", label: "Circular fibra" },
+                                { value: "Desconhecido", label: "Desconhecido" },
+                            ]}
+                            onChange={(value) => handleFieldChange('poste', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Altura do poste?"
+                            options={[
+                                { value: "5", label: "5" },
+                                { value: "6", label: "6" },
+                                { value: "7", label: "7" },
+                                { value: "8", label: "8" },
+                                { value: "9", label: "9" },
+                                { value: "10", label: "10" },
+                                { value: "11", label: "11" },
+                                { value: "12", label: "12" },
+                                { value: "13", label: "13" },
+                                { value: "14", label: "14" },
+                                { value: "15", label: "15" },
+                                { value: "16", label: "16" },
+                                { value: "17", label: "17" },
+                                { value: "18", label: "18" },
+                            ]}
+                            onChange={(value) => handleFieldChange('alturaposte', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Estrutura da postiação ?"
+                            options={[
+                                { value: "Unilateral", label: "Unilateral" },
+                                { value: "Bilateral", label: "Bilateral" },
+                                { value: "Canteiro central", label: "Canteiro central" },
+                                { value: "Praça", label: "Praça" },
+                                { value: "Em frente ao oposto", label: "Em frente ao oposto" },
+                            ]}
+                            onChange={(value) => handleFieldChange('estruturaposte', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Selecione o tipo do braço ?"
+                            options={[
+                                { value: "Braço Curto", label: "Braço Curto" },
+                                { value: "Braço Médio", label: "Braço Médio" },
+                                { value: "Braço Longo", label: "Braço Longo" },
+                                { value: "Level 1", label: "Level 1" },
+                                { value: "Level 2", label: "Level 2" },
+                                { value: "Suporte com 1", label: "Suporte com 1" },
+                                { value: "Suporte com 2", label: "Suporte com 2" },
+                                { value: "Suporte com 3", label: "Suporte com 3" },
+                                { value: "Suporte com 4", label: "Suporte com 4" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoBraco', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tamanho do Braço ?"
+                            options={[
+                                { value: "0.50", label: "0.50" },
+                                { value: "1.20", label: "1.20" },
+                                { value: "2.20", label: "2.20" },
+                                { value: "3.20", label: "3.20" },
+                                { value: "4.20", label: "4.20" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tamanhoBraco', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Quantidade de Pontos ?"
+                            options={[
+                                { value: "1", label: "1" },
+                                { value: "2", label: "2" },
+                                { value: "3", label: "3" },
+                                { value: "4", label: "4" },
+                            ]}
+                            onChange={(value) => handleFieldChange('quantidadePontos', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo da Lâmpada ?"
+                            options={[
+                                { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
+                                { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
+                                { value: "Mista", label: "Mista" },
+                                { value: "Led", label: "Led" },
+                                { value: "Desconhecida", label: "Desconhecida" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoLampada', value)} />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Potência da lâmpada ?"
+                            options={[
+                                { value: "70 W", label: "70 W" },
+                                { value: "80 W", label: "80 W" },
+                                { value: "100 W", label: "100 W" },
+                                { value: "125 W", label: "125 W" },
+                                { value: "150 W", label: "150 W" },
+                                { value: "250 W", label: "250 W" },
+                                { value: "400 W", label: "400 W" },
+                                { value: "Desconhecida", label: "Desconhecida" },
+                            ]}
+                            onChange={(value) => handleFieldChange('potenciaLampada', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo do Reator ?"
+                            options={[
+                                { value: "Reator Externo", label: "Reator Externo" },
+                                { value: "Reator Integrado", label: "Reator Integrado" },
+                                { value: "Módulo", label: "Módulo" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoReator', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de Comando ?"
+                            options={[
+                                { value: "Individual", label: "Individual" },
+                                { value: "Coletivo", label: "Coletivo" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoComando', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de Rede ?"
+                            options={[
+                                { value: "Aérea BT", label: "Aérea BT" },
+                                { value: "Convencional", label: "Convencional" },
+                                { value: "Subterrânea", label: "Subterrânea" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoRede', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de Cabo ?"
+                            options={[
+                                { value: "Alumínio Nú", label: "Alumínio Nú" },
+                                { value: "Alumínio isolado XLPE", label: "Alumínio isolado XLPE" },
+                                { value: "Multiplexado", label: "Multiplexado" },
+                                { value: "Cobre Nú", label: "Cobre Nú" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoCabo', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Número de fases ?"
+                            options={[
+                                { value: "Monofásico", label: "Monofásico" },
+                                { value: "Bifásico", label: "Bifásico" },
+                                { value: "Trifásico", label: "Trifásico" },
+                            ]}
+                            onChange={(value) => handleFieldChange('numeroFases', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <h2 className="col-span-1 md:col-span-2 text-lg font-semibold text-center bg-gray-200 p-2 rounded-md">
+                            Informações da via
+                        </h2>
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de Via ?"
+                            options={[
+                                { value: "Via Rápida", label: "Via Rápida" },
+                                { value: "Via Local", label: "Via Local" },
+                                { value: "Via Arterial", label: "Via Arterial" },
+                                { value: "Via Coletora", label: "Via Coletora" },
+                                { value: "Via Rural", label: "Via Rural" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoVia', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Hierarquia de Via ?"
+                            options={[
+                                { value: "Acesso", label: "Acesso" },
+                                { value: "Alameda", label: "Alameda" },
+                                { value: "Avenida", label: "Avenida" },
+                                { value: "Estrada", label: "Estrada" },
+                                { value: "LMG", label: "LMG" },
+                                { value: "Rua", label: "Rua" },
+                                { value: "Travessa", label: "Travessa" },
+                                { value: "Viaduto", label: "Viaduto" },
+                            ]}
+                            onChange={(value) => handleFieldChange('hierarquiaVia', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de pavimento ?"
+                            options={[
+                                { value: "Asfalto", label: "Asfalto" },
+                                { value: "Paralelepipedo", label: "Paralelepipedo" },
+                                { value: "Terra", label: "Terra" },
+                                { value: "Bloquete", label: "Bloquete" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoPavimento', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Quantidade de faixas ?"
+                            options={[
+                                { value: "1", label: "1" },
+                                { value: "2", label: "2" },
+                                { value: "3", label: "3" },
+                                { value: "4", label: "4" },
+                                { value: "5", label: "5" },
+                                { value: "6", label: "6" },
+                            ]}
+                            onChange={(value) => handleFieldChange('quantidadeFaixas', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Tipo de Passeio ?"
+                            options={[
+                                { value: "Concreto", label: "Concreto" },
+                                { value: "Pedra", label: "Pedra" },
+                                { value: "Terra", label: "Terra" },
+                                { value: "Bloquete", label: "Bloquete" },
+                                { value: "Cerâmico", label: "Cerâmico" },
+                            ]}
+                            onChange={(value) => handleFieldChange('tipoPasseio', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Canteiro central existente ?"
+                            options={[
+                                { value: "Sim", label: "Sim" },
+                                { value: "Não", label: "Não" },
+                            ]}
+                            onChange={(value) => handleFieldChange('canteiroCentral', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <div className="col-span-1 md:col-span-2 mb-4 text-center">
+                            <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
+                            <input
+                                placeholder="Em Metros"
+                                type="text"
+                                className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <div className="col-span-1 md:col-span-2 text-center">
+                            <label className="mb-4 text-gray-700 font-extrabold">Distância entre postes</label>
+                            <input
+                                placeholder="Em Metros (calculado automaticamente)"
+                                type="text"
+                                value={state.distanciaEntrePostes}
+                                readOnly
+                                className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
+                            />
+                            <small className="text-gray-500">
+                                {state.distanciaEntrePostes ?
+                                    "Distância calculada automaticamente do poste anterior" :
+                                    "Será calculado após o próximo poste"}
+                            </small>
+                        </div>
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                        <ComboBox
+                            label="Finalidade da Instalação ?"
+                            options={[
+                                { value: "Viária", label: "Viária" },
+                                { value: "Cemitério", label: "Cemitério" },
+                                { value: "Praça", label: "Praça" },
+                                { value: "Espaço municipal", label: "Espaço municipal" },
+                                { value: "Ciclo via", label: "Ciclo via" },
+                                { value: "Pista de caminhada", label: "Pista de caminhada" },
+                            ]}
+                            onChange={(value) => handleFieldChange('finalidadeInstalacao', value)}
+                        />
+
+                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
                     </div>
 
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+                    {/* Botão de Salvar */}
+                    <div className="mt-6">
+                        <Checkbox
+                            label="Este é o último poste da rua"
+                            checked={isLastPost}
+                            onChange={(e) => setIsLastPost(e.target.checked)}
+                            className="mb-4"
+                        />
 
-                    <ComboBox
-                        label="Finalidade da Instalação ?"
-                        options={[
-                            { value: "Viária", label: "Viária" },
-                            { value: "Cemitério", label: "Cemitério" },
-                            { value: "Praça", label: "Praça" },
-                            { value: "Espaço municipal", label: "Espaço municipal" },
-                            { value: "Ciclo via", label: "Ciclo via" },
-                            { value: "Pista de caminhada", label: "Pista de caminhada" },
-                        ]}
-                        onChange={(value) => handleFieldChange('finalidadeInstalacao', value)}
-                    />
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-
-
-
+                        <button
+                            onClick={handleSalvarCadastro}
+                            className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            Salvar Cadastro
+                        </button>
+                    </div>
                 </div>
-            </div>
-
-            {/* Botão de Salvar */}
-            <div className="mt-6">
-                <Checkbox
-                    label="Este é o último poste da rua"
-                    checked={isLastPost}
-                    onChange={(e) => setIsLastPost(e.target.checked)}
-                    className="mb-4"
-                />
-
-                <button
-                    onClick={handleSalvarCadastro}
-                    className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    Salvar Cadastro
-                </button>
-            </div>
-        </div>
             </div >
-        
+        </div >
+
+
     );
 }
 

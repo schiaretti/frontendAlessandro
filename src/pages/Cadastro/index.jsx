@@ -3,6 +3,7 @@ import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";
+import BotaoArvore from "../../components/botaoArvore.jsx";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
@@ -10,11 +11,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { MarkerClusterGroup } from 'leaflet.markercluster';
 
-// ==============================================
-// CONSTANTES E CONFIGURAÇÕES
-// ==============================================
-
-// Tipos de fotos permitidas com descrições amigáveis
+// Tipos de fotos permitidas
 const TIPOS_FOTO = {
     PANORAMICA: 'PANORAMICA',
     LUMINARIA: 'LUMINARIA',
@@ -23,10 +20,20 @@ const TIPOS_FOTO = {
     LAMPADA: 'LAMPADA'
 };
 
-// Estado inicial do formulário
+// Reducer para gerenciar o estado do formulário
+function formReducer(state, action) {
+    switch (action.type) {
+        case 'UPDATE_FIELD':
+            return { ...state, [action.field]: action.value };
+        case 'RESET':
+            return initialState;
+        default:
+            return state;
+    }
+}
+
 const initialState = {
     cidade: "",
-    endereco: "",
     enderecoInput: "",
     numero: "",
     cep: "",
@@ -59,33 +66,16 @@ const initialState = {
     distanciaEntrePostes: "",
 };
 
-// Reducer para gerenciar o estado do formulário
-function formReducer(state, action) {
-    switch (action.type) {
-        case 'UPDATE_FIELD':
-            return { ...state, [action.field]: action.value };
-        case 'RESET':
-            return initialState;
-        default:
-            return state;
-    }
-}
-
-// ==============================================
-// COMPONENTE PRINCIPAL
-// ==============================================
-
 function Cadastro() {
     // ==============================================
     // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
     // ==============================================
 
-    // Obtém token do localStorage e decodifica
     const [token, setToken] = useState(localStorage.getItem('token'));
     const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
     const usuarioId = decoded?.id;
 
-    // Redireciona se não estiver autenticado
+    // Redireciona se não autenticado
     if (!usuarioId) {
         alert('Usuário não autenticado. Redirecionando para login...');
         window.location.href = '/login';
@@ -96,12 +86,11 @@ function Cadastro() {
     // SEÇÃO 2: ESTADOS E REFERÊNCIAS
     // ==============================================
 
-    // Referências
+    // Referências do mapa
     const mapRef = useRef(null);
     const markersGroupRef = useRef(null);
-    const fileInputRef = useRef(null);
 
-    // Estados do formulário
+    // Estados de controle
     const [state, dispatch] = useReducer(formReducer, initialState);
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
@@ -115,9 +104,8 @@ function Cadastro() {
     const [fotos, setFotos] = useState([]);
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [erroFotos, setErroFotos] = useState(null);
-    const [loading, setLoading] = useState(false);
 
-    // Hook de localização personalizado
+    // Hook de localização
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
 
     // ==============================================
@@ -133,12 +121,16 @@ function Cadastro() {
         }
     }, [liveCoords, accuracy, isLastPost, userCoords]);
 
+    // Função auxiliar para comparar arrays
+    function arraysEqual(a, b) {
+        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
+    }
     // Preenche campos do endereço automaticamente
     useEffect(() => {
         if (endereco) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
             dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
-            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
+            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco }); // Novo
             dispatch({ type: 'UPDATE_FIELD', field: 'cep', value: endereco.cep || state.cep });
 
             if (!isNumeroManual) {
@@ -163,10 +155,7 @@ function Cadastro() {
         }
 
         return () => {
-            if (mapRef.current) {
-                mapRef.current.remove();
-                mapRef.current = null;
-            }
+            // Mantenha a limpeza como está
         };
     }, [mostrarMapa, userCoords]);
 
@@ -178,66 +167,62 @@ function Cadastro() {
     }, [postesCadastrados]);
 
     // ==============================================
-    // SEÇÃO 4: FUNÇÕES AUXILIARES
+    // SEÇÃO 4: FUNÇÕES PRINCIPAIS
     // ==============================================
 
-    // Compara se dois arrays são iguais
-    const arraysEqual = (a, b) => {
-        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
+    // Busca postes cadastrados
+    const fetchPostesCadastrados = async () => {
+        try {
+            const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const postesProcessados = response.data.data.map(poste => {
+                const coords = poste.coords ||
+                    (poste.latitude && poste.longitude ?
+                        [poste.latitude, poste.longitude] :
+                        null);
+
+                return {
+                    ...poste,
+                    coords: coords ? coords.map(Number) : null
+                };
+            });
+
+            const postesValidos = postesProcessados.filter(poste =>
+                poste.coords &&
+                !isNaN(poste.coords[0]) &&
+                !isNaN(poste.coords[1])
+            );
+
+            setPostesCadastrados(postesValidos);
+            return postesValidos;
+        } catch (error) {
+            console.error("Erro ao buscar postes:", error);
+            if (error.response?.status === 401) {
+                handleLogout();
+            }
+            return [];
+        }
     };
 
-    // Obtém nome amigável para tipo de foto
-    const getNomeTipoFoto = (tipo) => {
-        const nomes = {
-            [TIPOS_FOTO.PANORAMICA]: 'Panorâmica',
-            [TIPOS_FOTO.LUMINARIA]: 'Luminária',
-            [TIPOS_FOTO.TELECOM]: 'Telecom',
-            [TIPOS_FOTO.ARVORE]: 'Árvore',
-            [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
-        };
-        return nomes[tipo] || 'Desconhecido';
-    };
-
-    // Calcula distância entre coordenadas em metros
-    const calcularDistancia = (lat1, lon1, lat2, lon2) => {
-        const R = 6371e3; // Raio da Terra em metros
-        const φ1 = lat1 * Math.PI / 180;
-        const φ2 = lat2 * Math.PI / 180;
-        const Δφ = (lat2 - lat1) * Math.PI / 180;
-        const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return Math.round(R * c);
-    };
-
-    // ==============================================
-    // SEÇÃO 5: FUNÇÕES DO MAPA
-    // ==============================================
-
-    // Inicializa o mapa Leaflet
+    // Inicializa o mapa
     const initMap = () => {
         if (mapRef.current) {
             mapRef.current.setView(userCoords, 18);
             return;
         }
 
-        // Cria nova instância do mapa
         mapRef.current = L.map('mapa', {
             zoomControl: true,
             preferCanvas: true
         }).setView(userCoords, 18);
 
-        // Adiciona camada base do OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             maxZoom: 19
         }).addTo(mapRef.current);
 
-        // Configura cluster de marcadores
         markersGroupRef.current = new MarkerClusterGroup({
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: false,
@@ -246,12 +231,12 @@ function Cadastro() {
             iconCreateFunction: function (cluster) {
                 return L.divIcon({
                     html: `
-                        <div class="flex items-center justify-center w-10 h-10 rounded-full bg-orange-500/60">
-                          <div class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-600/90 text-white font-bold">
-                            ${cluster.getChildCount()}
-                          </div>
-                        </div>
-                    `,
+            <div class="flex items-center justify-center w-10 h-10 rounded-full bg-orange-500/60">
+              <div class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-600/90 text-white font-bold">
+                ${cluster.getChildCount()}
+              </div>
+            </div>
+          `,
                     iconSize: L.point(40, 40)
                 });
             }
@@ -262,16 +247,14 @@ function Cadastro() {
         addPostMarkers();
     };
 
-    // Atualiza marcador do usuário no mapa
+    // Atualiza marcador do usuário
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
 
-        // Remove marcador existente
         if (mapRef.current.userMarker) {
             mapRef.current.removeLayer(mapRef.current.userMarker);
         }
 
-        // Adiciona novo marcador
         mapRef.current.userMarker = L.circleMarker(coords, {
             color: '#2563eb',
             fillColor: '#3b82f6',
@@ -282,7 +265,7 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-    // Adiciona marcadores dos postes ao mapa
+    // Adiciona marcadores dos postes
     const addPostMarkers = () => {
         if (!mapRef.current || !markersGroupRef.current) return;
 
@@ -298,18 +281,18 @@ function Cadastro() {
             const marker = L.marker(coords, {
                 icon: L.divIcon({
                     html: `
-                        <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
-                    `,
-                    iconSize: [10, 10],
-                    className: 'leaflet-marker-icon-no-border'
+                    <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-700"></div>
+                `,
+                    iconSize: [10, 10], // Tamanho reduzido
+                    className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
                 })
             }).bindPopup(`
-                <div class="text-sm">
-                    <b>Poste #${index + 1}</b><br>
-                    ${poste.endereco || 'Endereço não disponível'}<br>
-                    <small>Cidade: ${poste.cidade || 'Não informada'}</small>
-                </div>
-            `);
+            <div class="text-sm">
+                <b>Poste #${index + 1}</b><br>
+                ${poste.endereco || 'Endereço não disponível'}<br>
+                <small>Cidade: ${poste.cidade || 'Não informada'}</small>
+            </div>
+        `);
 
             markersGroupRef.current.addLayer(marker);
             bounds.extend(coords);
@@ -319,10 +302,6 @@ function Cadastro() {
             mapRef.current.fitBounds(bounds.pad(0.2));
         }
     };
-
-    // ==============================================
-    // SEÇÃO 6: FUNÇÕES DE LOCALIZAÇÃO
-    // ==============================================
 
     // Obtém localização do usuário
     const obterLocalizacaoUsuario = async () => {
@@ -382,7 +361,7 @@ function Cadastro() {
         setLocalizacaoError(errorMessage);
 
         if (!userCoords) {
-            setUserCoords([-23.5505, -46.6333]); // Coordenadas padrão (São Paulo)
+            setUserCoords([-23.5505, -46.6333]);
             setMostrarMapa(true);
         }
     };
@@ -397,148 +376,139 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
-    // ==============================================
-    // SEÇÃO 7: FUNÇÕES DE DADOS
-    // ==============================================
-
-    // Busca postes cadastrados na API
-    const fetchPostesCadastrados = async () => {
-        try {
-            const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const postesProcessados = response.data.data.map(poste => {
-                const coords = poste.coords ||
-                    (poste.latitude && poste.longitude ?
-                        [poste.latitude, poste.longitude] :
-                        null);
-
-                return {
-                    ...poste,
-                    coords: coords ? coords.map(Number) : null
-                };
-            });
-
-            const postesValidos = postesProcessados.filter(poste =>
-                poste.coords &&
-                !isNaN(poste.coords[0]) &&
-                !isNaN(poste.coords[1])
-            );
-
-            setPostesCadastrados(postesValidos);
-            return postesValidos;
-        } catch (error) {
-            console.error("Erro ao buscar postes:", error);
-            if (error.response?.status === 401) {
-                handleLogout();
-            }
-            return [];
+    // Adiciona foto ao estado
+    const adicionarFoto = (tipo, fotoFile) => {
+        if (!fotoFile) {
+            console.error(`Nenhum arquivo recebido para: ${tipo}`);
+            return;
         }
+
+        if (!(fotoFile instanceof File)) {
+            console.error(`Tipo de arquivo inválido para: ${tipo}`, fotoFile);
+            alert(`O arquivo para ${tipo} não é válido`);
+            return;
+        }
+
+        if (fotoFile.size > 5 * 1024 * 1024) {
+            alert('A foto é muito grande (máximo 5MB)');
+            return;
+        }
+
+        // Verifica tipo de imagem
+        if (!fotoFile.type.startsWith('image/')) {
+            alert('Por favor, envie apenas imagens');
+            return;
+        }
+
+        setFotos(prev => [
+            ...prev.filter(f => f.tipo !== tipo),
+            {
+                arquivo: fotoFile,
+                tipo: tipo,
+                coords: userCoords,
+                id: `${tipo}-${Date.now()}`,
+                nome: tipo === TIPOS_FOTO.PANORAMICA ? 'Panorâmica' :
+                    tipo === TIPOS_FOTO.LUMINARIA ? 'Luminária' :
+                        tipo === TIPOS_FOTO.TELECOM ? 'Telecom' :
+                            '2° Tipo Luminária'
+            }
+        ]);
     };
 
-    // ==============================================
-    // SEÇÃO 8: FUNÇÕES DE FOTOS
-    // ==============================================
+   /* // Handlers para fotos
+    const handleFotoPanoramica = (fotoFile) => adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
+    const handleFotoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
+    const handleFotoArvore = (fotoFile) => adicionarFoto(TIPOS_FOTO.ARVORE, fotoFile);
+    const handleFotoTelecon = (fotoFile) => adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
+    const handleFoto2TipoLuminaria = (fotoFile) => adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);*/
 
-    // Comprime imagem para reduzir tamanho (especialmente útil para mobile)
-    const comprimirImagem = (file, maxWidth = 1024, quality = 0.7) => {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const scale = maxWidth / img.width;
+    // Verifica fotos obrigatórias
+   /* const verificarFotos = () => {
+        const fotosObrigatorias = [
+            { tipo: TIPOS_FOTO.PANORAMICA, nome: "Panorâmica" },
+            { tipo: TIPOS_FOTO.LUMINARIA, nome: "Luminária" }
+        ];
 
-                    canvas.width = maxWidth;
-                    canvas.height = img.height * scale;
+        const fotosPresentes = fotos.map(f => f.tipo);
+        const fotosFaltantes = fotosObrigatorias.filter(
+            foto => !fotosPresentes.includes(foto.tipo)
+        );
 
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        if (fotosFaltantes.length > 0) {
+            const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(f => `- ${f.nome}`).join('\n')}`;
+            console.error(mensagem);
+            alert(mensagem);
+            return false;
+        }
 
-                    canvas.toBlob((blob) => {
-                        resolve(new File([blob], file.name, {
-                            type: 'image/jpeg',
-                            lastModified: Date.now()
-                        }));
-                    }, 'image/jpeg', quality);
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
+        return true;
+    };*/
+
+ 
+
+    // Helper para nomes de tipos de foto
+    const getNomeTipoFoto = (tipo) => {
+        const nomes = {
+            [TIPOS_FOTO.PANORAMICA]: 'Panorâmica',
+            [TIPOS_FOTO.LUMINARIA]: 'Luminária',
+            [TIPOS_FOTO.TELECOM]: 'Telecom',
+            [TIPOS_FOTO.ARVORE]: 'Árvore',
+            [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
+        };
+        return nomes[tipo] || 'Desconhecido';
     };
 
-    // Adiciona foto ao estado (com compressão para mobile)
-    const adicionarFoto = async (tipo, fotoFile) => {
+    // Handlers para fotos (agora assíncronos)
+    const handleFotoPanoramica = async (fotoFile) => {
         try {
-            // Validações básicas
-            if (!fotoFile) {
-                throw new Error(`Nenhum arquivo recebido para: ${tipo}`);
-            }
-
-            if (!(fotoFile instanceof File)) {
-                throw new Error(`Tipo de arquivo inválido para: ${tipo}`);
-            }
-
-            if (fotoFile.size > 5 * 1024 * 1024) {
-                throw new Error('A foto é muito grande (máximo 5MB)');
-            }
-
-            if (!fotoFile.type.startsWith('image/')) {
-                throw new Error('Por favor, envie apenas imagens');
-            }
-
-            // Comprime imagem se for maior que 1MB (especialmente útil para mobile)
-            let arquivoFinal = fotoFile;
-            if (fotoFile.size > 1 * 1024 * 1024) {
-                arquivoFinal = await comprimirImagem(fotoFile);
-            }
-
-            // Atualiza estado com a nova foto
-            setFotos(prev => [
-                ...prev.filter(f => f.tipo !== tipo),
-                {
-                    arquivo: arquivoFinal,
-                    tipo: tipo,
-                    coords: userCoords,
-                    id: `${tipo}-${Date.now()}`,
-                    nome: getNomeTipoFoto(tipo)
-                }
-            ]);
-
+            console.log('Antes de adicionar - Panorâmica:', file);
+            await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
+            console.log('Depois de adicionar - Panorâmica:', fotos);
             return true;
         } catch (error) {
-            console.error(`Erro ao adicionar foto ${tipo}:`, error);
             alert(error.message);
             return false;
         }
     };
 
-    // Handlers para cada tipo de foto
-    const handleFotoPanoramica = async (fotoFile) => {
-        return await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
-    };
-
     const handleFotoLuminaria = async (fotoFile) => {
-        return await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
+        try {
+            console.log('Antes de adicionar - Luminaria:', file);
+            await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
+            console.log('Depois de adicionar - Luminaria:', fotos);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
     };
 
     const handleFotoTelecon = async (fotoFile) => {
-        return await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
+        try {
+            await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
     };
 
     const handleFoto2TipoLuminaria = async (fotoFile) => {
-        return await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
+        try {
+            await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
+            return true;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
     };
 
-    // Verifica fotos obrigatórias
+    // Verificação robusta de fotos obrigatórias
     const verificarFotos = () => {
         const tiposObrigatorios = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
         const nomesObrigatorios = tiposObrigatorios.map(getNomeTipoFoto);
 
-        // Filtra apenas fotos válidas
+        // Filtra apenas fotos válidas (com arquivo real)
         const fotosValidas = fotos.filter(foto =>
             foto.arquivo instanceof File &&
             foto.arquivo.size > 0 &&
@@ -552,10 +522,12 @@ function Cadastro() {
 
         if (fotosFaltantes.length > 0) {
             const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(t => `- ${getNomeTipoFoto(t)}`).join('\n')}`;
+
+            // Melhor feedback visual (substitua por seu sistema de notificação)
             const faltantesStr = fotosFaltantes.map(getNomeTipoFoto).join(', ');
             setErroFotos(`Adicione: ${faltantesStr}`);
 
-            // Rolagem suave para a primeira foto faltante
+            // Rolagem para a primeira foto faltante
             setTimeout(() => {
                 const primeiroTipoFaltante = fotosFaltantes[0];
                 const elemento = document.getElementById(`botao-camera-${primeiroTipoFaltante}`);
@@ -569,36 +541,42 @@ function Cadastro() {
         return true;
     };
 
-    // ==============================================
-    // SEÇÃO 9: FUNÇÕES DE FORMULÁRIO
-    // ==============================================
+    // Calcula distância entre coordenadas
+    const calcularDistancia = (lat1, lon1, lat2, lon2) => {
+        const R = 6371e3; // Raio da Terra em metros
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-    // Handler genérico para campos do formulário
-    const handleFieldChange = (field, value) => {
-        dispatch({ type: 'UPDATE_FIELD', field, value });
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return Math.round(R * c);
     };
 
-    // Faz logout do usuário
+    // Logout
     const handleLogout = () => {
         localStorage.removeItem('token');
         window.location.href = '/login';
     };
 
-    // Salva o cadastro completo
+    // Salva o cadastro
     const handleSalvarCadastro = async () => {
-        // Verifica fotos obrigatórias
+        // Verifica fotos obrigatórias primeiro
         if (!verificarFotos()) return;
 
-        // Verifica coordenadas
         if (!userCoords || userCoords.length < 2) {
             alert("Não foi possível obter coordenadas válidas!");
             return;
         }
 
-        // Campos obrigatórios
+        // Lista de campos obrigatórios e seus nomes para exibição
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
-            { campo: 'endereco', nome: 'Endereço' },
+            { campo: 'endereco', nome: 'Endereço' }, // Alterado de enderecoInput para endereco
             { campo: 'numero', nome: 'Número' },
             { campo: 'cep', nome: 'CEP' },
             { campo: 'transformador', nome: 'Transformador' },
@@ -619,10 +597,8 @@ function Cadastro() {
             return;
         }
 
-        setLoading(true);
-
         try {
-            // Calcula distância do poste anterior
+            // Calcula distância se tiver poste anterior
             let distancia = 0;
             if (posteAnterior && userCoords) {
                 distancia = calcularDistancia(
@@ -636,28 +612,32 @@ function Cadastro() {
 
             const formData = new FormData();
 
-            // Adiciona campos ao formData
+            // Adiciona campos ao formData - agora mapeando enderecoInput para endereco
             Object.entries({
                 ...state,
-                endereco: state.enderecoInput
+                endereco: state.enderecoInput // Mapeia enderecoInput para endereco
             }).forEach(([key, value]) => {
                 if (value !== undefined && value !== null) {
                     formData.append(key, value);
                 }
             });
 
-            // Adiciona dados de localização
             formData.append('coords', JSON.stringify(userCoords));
             formData.append('usuarioId', usuarioId);
             formData.append('isLastPost', isLastPost.toString());
 
-            // Adiciona fotos (já comprimidas se necessário)
+            // Adiciona fotos
             fotos.forEach((foto) => {
                 formData.append('fotos', foto.arquivo);
                 formData.append('tipos', foto.tipo);
             });
 
-            // Envia para a API
+            console.log("Dados a serem enviados:", {
+                ...state,
+                endereco: state.enderecoInput,
+                fotos: fotos.map(f => f.tipo)
+            });
+
             const response = await axios.post(
                 'https://backendalesandro-production.up.railway.app/api/postes',
                 formData,
@@ -666,7 +646,7 @@ function Cadastro() {
                         'Content-Type': 'multipart/form-data',
                         Authorization: `Bearer ${token}`
                     },
-                    timeout: 30000 // Tempo maior para mobile
+                    timeout: 10000
                 }
             );
 
@@ -695,13 +675,16 @@ function Cadastro() {
             } else {
                 alert(error.response?.data?.message || 'Erro ao cadastrar. Tente novamente.');
             }
-        } finally {
-            setLoading(false);
         }
     };
 
+    // Handler genérico para campos do formulário
+    const handleFieldChange = (field, value) => {
+        dispatch({ type: 'UPDATE_FIELD', field, value });
+    };
+
     // ==============================================
-    // SEÇÃO 10: RENDERIZAÇÃO
+    // SEÇÃO 5: RENDERIZAÇÃO
     // ==============================================
 
     return (
@@ -719,8 +702,8 @@ function Cadastro() {
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={obterLocalizacaoUsuario}
-                                disabled={isLoadingLocation || loading}
-                                className={`px-4 py-2 rounded-md text-white ${isLoadingLocation ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={isLoadingLocation}
+                                className={`px-4 py-2 rounded-md text-white ${isLoadingLocation ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'}`}
                             >
                                 {isLoadingLocation ? 'Obtendo localização...' : 'Obter Localização'}
                             </button>
@@ -728,8 +711,7 @@ function Cadastro() {
                             {userCoords && (
                                 <button
                                     onClick={() => setMostrarMapa(!mostrarMapa)}
-                                    disabled={loading}
-                                    className={`px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                                 >
                                     {mostrarMapa ? 'Ocultar Mapa' : 'Mostrar Mapa'}
                                 </button>
@@ -753,8 +735,7 @@ function Cadastro() {
                             <div id="mapa" className="h-96 w-full rounded-lg border border-gray-300"></div>
                             <button
                                 onClick={fecharMapa}
-                                disabled={loading}
-                                className={`mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                             >
                                 Fechar Mapa
                             </button>
@@ -800,7 +781,7 @@ function Cadastro() {
                                 value={state.enderecoInput}
                                 onChange={(e) => {
                                     dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
-                                    dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
+                                    dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value }); // Atualiza ambos
                                 }}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -831,19 +812,16 @@ function Cadastro() {
                     </div>
 
                     {/* Seção de Fotos */}
-                    <div className="mb-6">
-                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">
-                            Fotos Obrigatórias
-                        </h2>
-
                         {/* Foto Panorâmica */}
-                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                        <div className="p-4 bg-gray-50 rounded-lg">
                             <BotaoCamera
-                                id="botao-camera-PANORAMICA"
+                                id="foto-panoramica"
                                 label="Foto Panorâmica"
-                                onFotoCapturada={handleFotoPanoramica}
+                                onFotoCapturada={(file) => {
+                                    console.log('Arquivo recebido (Panorâmica):', file);
+                                    adicionarFoto(TIPOS_FOTO.PANORAMICA, file);
+                                }}
                                 obrigatorio={true}
-                                disabled={loading}
                                 erro={erroFotos?.includes('Panorâmica')}
                             />
                             <p className="text-center text-sm mt-2 font-medium">
@@ -855,13 +833,15 @@ function Cadastro() {
                         </div>
 
                         {/* Foto da Luminária */}
-                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                        <div className="p-4 bg-gray-50 rounded-lg">
                             <BotaoCamera
-                                id="botao-camera-LUMINARIA"
+                                id="foto-luminaria"
                                 label="Foto da Luminária"
-                                onFotoCapturada={handleFotoLuminaria}
+                                onFotoCapturada={(file) => {
+                                    console.log('Arquivo recebido (Luminária):', file);
+                                    adicionarFoto(TIPOS_FOTO.LUMINARIA, file);
+                                }}
                                 obrigatorio={true}
-                                disabled={loading}
                                 erro={erroFotos?.includes('Luminária')}
                             />
                             <p className="text-center text-sm mt-2 font-medium">
@@ -871,449 +851,447 @@ function Cadastro() {
                                 )}
                             </p>
                         </div>
+                    
 
-                        {/* Fotos Opcionais */}
-                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-300 text-center mt-6">
-                            Fotos Opcionais
-                        </h2>
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                        {/* Foto Telecom */}
-                        <div className="p-4 bg-gray-50 rounded-lg mb-4">
+                    {/* Foto Telecon (opcional) */}
+                    <div className="space-y-2">
+                        <div className="flex justify-center">
                             <BotaoCamera
-                                id="botao-camera-TELECOM"
                                 label="Foto Telecom (opcional)"
                                 onFotoCapturada={handleFotoTelecon}
                                 obrigatorio={false}
-                                disabled={loading}
                             />
-                            <p className="text-center text-sm mt-2 font-medium text-gray-600">
-                                TELECOM
-                            </p>
                         </div>
+                        <p className="text-sm text-center font-bold text-gray-500">
+                            FOTO TELECOM
+                        </p>
+                    </div>
 
-                        {/* 2° Tipo de Luminária */}
-                        <div className="p-4 bg-gray-50 rounded-lg">
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    {/* 2° Tipo de lâmpada (opcional) */}
+                    <div className="space-y-2">
+                        <div className="flex justify-center">
                             <BotaoCamera
-                                id="botao-camera-LAMPADA"
-                                label="2° Tipo de Luminária (opcional)"
+                                label="2° Tipo de lâmpada (opcional)"
                                 onFotoCapturada={handleFoto2TipoLuminaria}
                                 obrigatorio={false}
-                                disabled={loading}
                             />
-                            <p className="text-center text-sm mt-2 font-medium text-gray-600">
-                                2° TIPO LUMINÁRIA
-                            </p>
                         </div>
-
-                        {/* Mensagem de validação */}
-                        <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
-                            <p>Fotos marcadas com <span className="font-bold">*</span> são obrigatórias</p>
-                        </div>
+                        <p className="text-sm text-center font-bold text-gray-500">
+                            FOTO 2° TIPO LUMINÁRIA
+                        </p>
                     </div>
+                
 
-                    {/* Seção de Características Técnicas */}
-                    <div className="mb-6">
-                        <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">
-                            Dados da Postiação
-                        </h2>
+                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                        <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                            <ComboBox
-                                label="Poste com Transformador?"
-                                options={[
-                                    { value: "Sim", label: "Sim" },
-                                    { value: "Não", label: "Não" },
-                                ]}
-                                onChange={(value) => handleFieldChange('transformador', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Poste com medição?"
-                                options={[
-                                    { value: "Sim", label: "Sim" },
-                                    { value: "Não", label: "Não" },
-                                ]}
-                                onChange={(value) => handleFieldChange('medicao', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Poste com telecom?"
-                                options={[
-                                    { value: "Sim", label: "Sim" },
-                                    { value: "Não", label: "Não" },
-                                ]}
-                                onChange={(value) => handleFieldChange('telecom', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Poste com concentrador?"
-                                options={[
-                                    { value: "Sim", label: "Sim" },
-                                    { value: "Não", label: "Não" },
-                                ]}
-                                onChange={(value) => handleFieldChange('concentrador', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Poste de:"
-                                options={[
-                                    { value: "Circular concreto", label: "Circular concreto" },
-                                    { value: "Madeira", label: "Madeira" },
-                                    { value: "Concreto DT", label: "Concreto DT" },
-                                    { value: "Circular metal", label: "Circular metal" },
-                                    { value: "Ornamental", label: "Ornamental" },
-                                    { value: "Circular fibra", label: "Circular fibra" },
-                                    { value: "Desconhecido", label: "Desconhecido" },
-                                ]}
-                                onChange={(value) => handleFieldChange('poste', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Altura do poste?"
-                                options={[
-                                    { value: "5", label: "5" },
-                                    { value: "6", label: "6" },
-                                    { value: "7", label: "7" },
-                                    { value: "8", label: "8" },
-                                    { value: "9", label: "9" },
-                                    { value: "10", label: "10" },
-                                    { value: "11", label: "11" },
-                                    { value: "12", label: "12" },
-                                    { value: "13", label: "13" },
-                                    { value: "14", label: "14" },
-                                    { value: "15", label: "15" },
-                                    { value: "16", label: "16" },
-                                    { value: "17", label: "17" },
-                                    { value: "18", label: "18" },
-                                ]}
-                                onChange={(value) => handleFieldChange('alturaposte', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Estrutura da postiação ?"
-                                options={[
-                                    { value: "Unilateral", label: "Unilateral" },
-                                    { value: "Bilateral", label: "Bilateral" },
-                                    { value: "Canteiro central", label: "Canteiro central" },
-                                    { value: "Praça", label: "Praça" },
-                                    { value: "Em frente ao oposto", label: "Em frente ao oposto" },
-                                ]}
-                                onChange={(value) => handleFieldChange('estruturaposte', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Selecione o tipo do braço ?"
-                                options={[
-                                    { value: "Braço Curto", label: "Braço Curto" },
-                                    { value: "Braço Médio", label: "Braço Médio" },
-                                    { value: "Braço Longo", label: "Braço Longo" },
-                                    { value: "Level 1", label: "Level 1" },
-                                    { value: "Level 2", label: "Level 2" },
-                                    { value: "Suporte com 1", label: "Suporte com 1" },
-                                    { value: "Suporte com 2", label: "Suporte com 2" },
-                                    { value: "Suporte com 3", label: "Suporte com 3" },
-                                    { value: "Suporte com 4", label: "Suporte com 4" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoBraco', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tamanho do Braço ?"
-                                options={[
-                                    { value: "0.50", label: "0.50" },
-                                    { value: "1.20", label: "1.20" },
-                                    { value: "2.20", label: "2.20" },
-                                    { value: "3.20", label: "3.20" },
-                                    { value: "4.20", label: "4.20" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tamanhoBraco', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Quantidade de Pontos ?"
-                                options={[
-                                    { value: "1", label: "1" },
-                                    { value: "2", label: "2" },
-                                    { value: "3", label: "3" },
-                                    { value: "4", label: "4" },
-                                ]}
-                                onChange={(value) => handleFieldChange('quantidadePontos', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo da Lâmpada ?"
-                                options={[
-                                    { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
-                                    { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
-                                    { value: "Mista", label: "Mista" },
-                                    { value: "Led", label: "Led" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoLampada', value)} />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Potência da lâmpada ?"
-                                options={[
-                                    { value: "70 W", label: "70 W" },
-                                    { value: "80 W", label: "80 W" },
-                                    { value: "100 W", label: "100 W" },
-                                    { value: "125 W", label: "125 W" },
-                                    { value: "150 W", label: "150 W" },
-                                    { value: "250 W", label: "250 W" },
-                                    { value: "400 W", label: "400 W" },
-                                ]}
-                                onChange={(value) => handleFieldChange('potenciaLampada', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo do Reator ?"
-                                options={[
-                                    { value: "Reator Externo", label: "Reator Externo" },
-                                    { value: "Reator Integrado", label: "Reator Integrado" },
-                                    { value: "Módulo", label: "Módulo" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoReator', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de Comando ?"
-                                options={[
-                                    { value: "Individual", label: "Individual" },
-                                    { value: "Coletivo", label: "Coletivo" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoComando', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de Rede ?"
-                                options={[
-                                    { value: "Aérea BT", label: "Aérea BT" },
-                                    { value: "Convencional", label: "Convencional" },
-                                    { value: "Subterrânea", label: "Subterrânea" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoRede', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de Cabo ?"
-                                options={[
-                                    { value: "Alumínio Nú", label: "Alumínio Nú" },
-                                    { value: "Alumínio isolado XLPE", label: "Alumínio isolado XLPE" },
-                                    { value: "Multiplexado", label: "Multiplexado" },
-                                    { value: "Cobre Nú", label: "Cobre Nú" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoCabo', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Número de fases ?"
-                                options={[
-                                    { value: "Monofásico", label: "Monofásico" },
-                                    { value: "Bifásico", label: "Bifásico" },
-                                    { value: "Trifásico", label: "Trifásico" },
-                                ]}
-                                onChange={(value) => handleFieldChange('numeroFases', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <h2 className="col-span-1 md:col-span-2 text-lg font-semibold text-center bg-gray-200 p-2 rounded-md">
-                                Informações da via
-                            </h2>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de Via ?"
-                                options={[
-                                    { value: "Via Rápida", label: "Via Rápida" },
-                                    { value: "Via Local", label: "Via Local" },
-                                    { value: "Via Arterial", label: "Via Arterial" },
-                                    { value: "Via Coletora", label: "Via Coletora" },
-                                    { value: "Via Rural", label: "Via Rural" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoVia', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Hierarquia de Via ?"
-                                options={[
-                                    { value: "Acesso", label: "Acesso" },
-                                    { value: "Alameda", label: "Alameda" },
-                                    { value: "Avenida", label: "Avenida" },
-                                    { value: "Estrada", label: "Estrada" },
-                                    { value: "LMG", label: "LMG" },
-                                    { value: "Rua", label: "Rua" },
-                                    { value: "Travessa", label: "Travessa" },
-                                    { value: "Viaduto", label: "Viaduto" },
-                                ]}
-                                onChange={(value) => handleFieldChange('hierarquiaVia', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de pavimento ?"
-                                options={[
-                                    { value: "Asfalto", label: "Asfalto" },
-                                    { value: "Paralelepipedo", label: "Paralelepipedo" },
-                                    { value: "Terra", label: "Terra" },
-                                    { value: "Bloquete", label: "Bloquete" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoPavimento', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Quantidade de faixas ?"
-                                options={[
-                                    { value: "1", label: "1" },
-                                    { value: "2", label: "2" },
-                                    { value: "3", label: "3" },
-                                    { value: "4", label: "4" },
-                                    { value: "5", label: "5" },
-                                    { value: "6", label: "6" },
-                                ]}
-                                onChange={(value) => handleFieldChange('quantidadeFaixas', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Tipo de Passeio ?"
-                                options={[
-                                    { value: "Concreto", label: "Concreto" },
-                                    { value: "Pedra", label: "Pedra" },
-                                    { value: "Terra", label: "Terra" },
-                                    { value: "Bloquete", label: "Bloquete" },
-                                    { value: "Cerâmico", label: "Cerâmico" },
-                                ]}
-                                onChange={(value) => handleFieldChange('tipoPasseio', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Canteiro central existente ?"
-                                options={[
-                                    { value: "Sim", label: "Sim" },
-                                    { value: "Não", label: "Não" },
-                                ]}
-                                onChange={(value) => handleFieldChange('canteiroCentral', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <div className="col-span-1 md:col-span-2 mb-4 text-center">
-                                <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
-                                <input
-                                    placeholder="Em Metros"
-                                    type="text"
-                                    className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                />
-                            </div>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <div className="col-span-1 md:col-span-2 text-center">
-                                <label className="mb-4 text-gray-700 font-extrabold">Distância entre postes</label>
-                                <input
-                                    placeholder="Em Metros (calculado automaticamente)"
-                                    type="text"
-                                    value={state.distanciaEntrePostes}
-                                    readOnly
-                                    className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
-                                />
-                                <small className="text-gray-500">
-                                    {state.distanciaEntrePostes ?
-                                        "Distância calculada automaticamente do poste anterior" :
-                                        "Será calculado após o próximo poste"}
-                                </small>
-                            </div>
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                            <ComboBox
-                                label="Finalidade da Instalação ?"
-                                options={[
-                                    { value: "Viária", label: "Viária" },
-                                    { value: "Cemitério", label: "Cemitério" },
-                                    { value: "Praça", label: "Praça" },
-                                    { value: "Espaço municipal", label: "Espaço municipal" },
-                                    { value: "Ciclo via", label: "Ciclo via" },
-                                    { value: "Pista de caminhada", label: "Pista de caminhada" },
-                                ]}
-                                onChange={(value) => handleFieldChange('finalidadeInstalacao', value)}
-                            />
-
-                            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-
-
-
-                        </div>
-                    </div>
-
-                    {/* Botão de Salvar */}
-                    <div className="mt-6">
-                        <Checkbox
-                            label="Este é o último poste da rua"
-                            checked={isLastPost}
-                            onChange={(e) => setIsLastPost(e.target.checked)}
-                            className="mb-4"
-                        />
-
-                        <button
-                            onClick={handleSalvarCadastro}
-                            className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            Salvar Cadastro
-                        </button>
-                    </div>
+                {/* Mensagem de validação */}
+                <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
+                    <p>Fotos marcadas com <span className="font-bold">*</span> são obrigatórias</p>
                 </div>
-            </div >
-        </div>
+            </div>
 
+            <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+            {/* Seção de Características Técnicas */}
+            <div className="mb-6">
+                <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">Dados da Postiação</h2>
+                <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <ComboBox
+                        label="Poste com Transformador?"
+                        options={[
+                            { value: "Sim", label: "Sim" },
+                            { value: "Não", label: "Não" },
+                        ]}
+                        onChange={(value) => handleFieldChange('transformador', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Poste com medição?"
+                        options={[
+                            { value: "Sim", label: "Sim" },
+                            { value: "Não", label: "Não" },
+                        ]}
+                        onChange={(value) => handleFieldChange('medicao', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Poste com telecom?"
+                        options={[
+                            { value: "Sim", label: "Sim" },
+                            { value: "Não", label: "Não" },
+                        ]}
+                        onChange={(value) => handleFieldChange('telecom', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Poste com concentrador?"
+                        options={[
+                            { value: "Sim", label: "Sim" },
+                            { value: "Não", label: "Não" },
+                        ]}
+                        onChange={(value) => handleFieldChange('concentrador', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Poste de:"
+                        options={[
+                            { value: "Circular concreto", label: "Circular concreto" },
+                            { value: "Madeira", label: "Madeira" },
+                            { value: "Concreto DT", label: "Concreto DT" },
+                            { value: "Circular metal", label: "Circular metal" },
+                            { value: "Ornamental", label: "Ornamental" },
+                            { value: "Circular fibra", label: "Circular fibra" },
+                            { value: "Desconhecido", label: "Desconhecido" },
+                        ]}
+                        onChange={(value) => handleFieldChange('poste', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Altura do poste?"
+                        options={[
+                            { value: "5", label: "5" },
+                            { value: "6", label: "6" },
+                            { value: "7", label: "7" },
+                            { value: "8", label: "8" },
+                            { value: "9", label: "9" },
+                            { value: "10", label: "10" },
+                            { value: "11", label: "11" },
+                            { value: "12", label: "12" },
+                            { value: "13", label: "13" },
+                            { value: "14", label: "14" },
+                            { value: "15", label: "15" },
+                            { value: "16", label: "16" },
+                            { value: "17", label: "17" },
+                            { value: "18", label: "18" },
+                        ]}
+                        onChange={(value) => handleFieldChange('alturaposte', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Estrutura da postiação ?"
+                        options={[
+                            { value: "Unilateral", label: "Unilateral" },
+                            { value: "Bilateral", label: "Bilateral" },
+                            { value: "Canteiro central", label: "Canteiro central" },
+                            { value: "Praça", label: "Praça" },
+                            { value: "Em frente ao oposto", label: "Em frente ao oposto" },
+                        ]}
+                        onChange={(value) => handleFieldChange('estruturaposte', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Selecione o tipo do braço ?"
+                        options={[
+                            { value: "Braço Curto", label: "Braço Curto" },
+                            { value: "Braço Médio", label: "Braço Médio" },
+                            { value: "Braço Longo", label: "Braço Longo" },
+                            { value: "Level 1", label: "Level 1" },
+                            { value: "Level 2", label: "Level 2" },
+                            { value: "Suporte com 1", label: "Suporte com 1" },
+                            { value: "Suporte com 2", label: "Suporte com 2" },
+                            { value: "Suporte com 3", label: "Suporte com 3" },
+                            { value: "Suporte com 4", label: "Suporte com 4" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoBraco', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tamanho do Braço ?"
+                        options={[
+                            { value: "0.50", label: "0.50" },
+                            { value: "1.20", label: "1.20" },
+                            { value: "2.20", label: "2.20" },
+                            { value: "3.20", label: "3.20" },
+                            { value: "4.20", label: "4.20" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tamanhoBraco', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Quantidade de Pontos ?"
+                        options={[
+                            { value: "1", label: "1" },
+                            { value: "2", label: "2" },
+                            { value: "3", label: "3" },
+                            { value: "4", label: "4" },
+                        ]}
+                        onChange={(value) => handleFieldChange('quantidadePontos', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo da Lâmpada ?"
+                        options={[
+                            { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
+                            { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
+                            { value: "Mista", label: "Mista" },
+                            { value: "Led", label: "Led" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoLampada', value)} />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Potência da lâmpada ?"
+                        options={[
+                            { value: "70 W", label: "70 W" },
+                            { value: "80 W", label: "80 W" },
+                            { value: "100 W", label: "100 W" },
+                            { value: "125 W", label: "125 W" },
+                            { value: "150 W", label: "150 W" },
+                            { value: "250 W", label: "250 W" },
+                            { value: "400 W", label: "400 W" },
+                        ]}
+                        onChange={(value) => handleFieldChange('potenciaLampada', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo do Reator ?"
+                        options={[
+                            { value: "Reator Externo", label: "Reator Externo" },
+                            { value: "Reator Integrado", label: "Reator Integrado" },
+                            { value: "Módulo", label: "Módulo" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoReator', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de Comando ?"
+                        options={[
+                            { value: "Individual", label: "Individual" },
+                            { value: "Coletivo", label: "Coletivo" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoComando', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de Rede ?"
+                        options={[
+                            { value: "Aérea BT", label: "Aérea BT" },
+                            { value: "Convencional", label: "Convencional" },
+                            { value: "Subterrânea", label: "Subterrânea" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoRede', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de Cabo ?"
+                        options={[
+                            { value: "Alumínio Nú", label: "Alumínio Nú" },
+                            { value: "Alumínio isolado XLPE", label: "Alumínio isolado XLPE" },
+                            { value: "Multiplexado", label: "Multiplexado" },
+                            { value: "Cobre Nú", label: "Cobre Nú" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoCabo', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Número de fases ?"
+                        options={[
+                            { value: "Monofásico", label: "Monofásico" },
+                            { value: "Bifásico", label: "Bifásico" },
+                            { value: "Trifásico", label: "Trifásico" },
+                        ]}
+                        onChange={(value) => handleFieldChange('numeroFases', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <h2 className="col-span-1 md:col-span-2 text-lg font-semibold text-center bg-gray-200 p-2 rounded-md">
+                        Informações da via
+                    </h2>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de Via ?"
+                        options={[
+                            { value: "Via Rápida", label: "Via Rápida" },
+                            { value: "Via Local", label: "Via Local" },
+                            { value: "Via Arterial", label: "Via Arterial" },
+                            { value: "Via Coletora", label: "Via Coletora" },
+                            { value: "Via Rural", label: "Via Rural" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoVia', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Hierarquia de Via ?"
+                        options={[
+                            { value: "Acesso", label: "Acesso" },
+                            { value: "Alameda", label: "Alameda" },
+                            { value: "Avenida", label: "Avenida" },
+                            { value: "Estrada", label: "Estrada" },
+                            { value: "LMG", label: "LMG" },
+                            { value: "Rua", label: "Rua" },
+                            { value: "Travessa", label: "Travessa" },
+                            { value: "Viaduto", label: "Viaduto" },
+                        ]}
+                        onChange={(value) => handleFieldChange('hierarquiaVia', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de pavimento ?"
+                        options={[
+                            { value: "Asfalto", label: "Asfalto" },
+                            { value: "Paralelepipedo", label: "Paralelepipedo" },
+                            { value: "Terra", label: "Terra" },
+                            { value: "Bloquete", label: "Bloquete" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoPavimento', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Quantidade de faixas ?"
+                        options={[
+                            { value: "1", label: "1" },
+                            { value: "2", label: "2" },
+                            { value: "3", label: "3" },
+                            { value: "4", label: "4" },
+                            { value: "5", label: "5" },
+                            { value: "6", label: "6" },
+                        ]}
+                        onChange={(value) => handleFieldChange('quantidadeFaixas', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Tipo de Passeio ?"
+                        options={[
+                            { value: "Concreto", label: "Concreto" },
+                            { value: "Pedra", label: "Pedra" },
+                            { value: "Terra", label: "Terra" },
+                            { value: "Bloquete", label: "Bloquete" },
+                            { value: "Cerâmico", label: "Cerâmico" },
+                        ]}
+                        onChange={(value) => handleFieldChange('tipoPasseio', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Canteiro central existente ?"
+                        options={[
+                            { value: "Sim", label: "Sim" },
+                            { value: "Não", label: "Não" },
+                        ]}
+                        onChange={(value) => handleFieldChange('canteiroCentral', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <div className="col-span-1 md:col-span-2 mb-4 text-center">
+                        <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
+                        <input
+                            placeholder="Em Metros"
+                            type="text"
+                            className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        />
+                    </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <div className="col-span-1 md:col-span-2 text-center">
+                        <label className="mb-4 text-gray-700 font-extrabold">Distância entre postes</label>
+                        <input
+                            placeholder="Em Metros (calculado automaticamente)"
+                            type="text"
+                            value={state.distanciaEntrePostes}
+                            readOnly
+                            className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
+                        />
+                        <small className="text-gray-500">
+                            {state.distanciaEntrePostes ?
+                                "Distância calculada automaticamente do poste anterior" :
+                                "Será calculado após o próximo poste"}
+                        </small>
+                    </div>
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+                    <ComboBox
+                        label="Finalidade da Instalação ?"
+                        options={[
+                            { value: "Viária", label: "Viária" },
+                            { value: "Cemitério", label: "Cemitério" },
+                            { value: "Praça", label: "Praça" },
+                            { value: "Espaço municipal", label: "Espaço municipal" },
+                            { value: "Ciclo via", label: "Ciclo via" },
+                            { value: "Pista de caminhada", label: "Pista de caminhada" },
+                        ]}
+                        onChange={(value) => handleFieldChange('finalidadeInstalacao', value)}
+                    />
+
+                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
+
+
+
+
+                </div>
+            </div>
+
+            {/* Botão de Salvar */}
+            <div className="mt-6">
+                <Checkbox
+                    label="Este é o último poste da rua"
+                    checked={isLastPost}
+                    onChange={(e) => setIsLastPost(e.target.checked)}
+                    className="mb-4"
+                />
+
+                <button
+                    onClick={handleSalvarCadastro}
+                    className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    Salvar Cadastro
+                </button>
+            </div>
+        </div>
+            </div >
+        
     );
 }
 
 export default Cadastro;
-
-
-

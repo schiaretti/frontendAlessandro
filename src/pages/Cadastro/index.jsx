@@ -9,7 +9,7 @@ import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { MarkerClusterGroup } from 'leaflet.markercluster';
+
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -105,6 +105,7 @@ function Cadastro() {
     const [fotos, setFotos] = useState([]);
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [erroFotos, setErroFotos] = useState(null);
+    const [reutilizarDados, setReutilizarDados] = useState(false);
 
     // Hook de localização
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
@@ -224,31 +225,15 @@ function Cadastro() {
             maxZoom: 19
         }).addTo(mapRef.current);
 
-        markersGroupRef.current = new MarkerClusterGroup({
-            spiderfyOnMaxZoom: true,
-            showCoverageOnHover: false,
-            zoomToBoundsOnClick: true,
-            maxClusterRadius: 0,
-            iconCreateFunction: function (cluster) {
-                return L.divIcon({
-                    html: `
-            <div class="flex items-center justify-center w-10 h-10 rounded-full bg-orange-500/60">
-              <div class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-600/90 text-white font-bold">
-                ${cluster.getChildCount()}
-              </div>
-            </div>
-          `,
-                    iconSize: L.point(40, 40)
-                });
-            }
-        });
-
+        // Substitui MarkerClusterGroup por um simples FeatureGroup
+        markersGroupRef.current = new L.FeatureGroup();
         mapRef.current.addLayer(markersGroupRef.current);
+
         updateUserMarker(userCoords);
         addPostMarkers();
     };
 
-    // Atualiza marcador do usuário
+    // Atualiza marcador do usuário (mantido igual)
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
 
@@ -266,7 +251,7 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-    // Adiciona marcadores dos postes
+    // Adiciona marcadores dos postes (simplificado)
     const addPostMarkers = () => {
         if (!mapRef.current || !markersGroupRef.current) return;
 
@@ -281,11 +266,9 @@ function Cadastro() {
 
             const marker = L.marker(coords, {
                 icon: L.divIcon({
-                    html: `
-                    <div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>
-                `,
-                    iconSize: [10, 10], // Tamanho reduzido
-                    className: 'leaflet-marker-icon-no-border' // Remove bordas padrão
+                    html: `<div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>`,
+                    iconSize: [10, 10],
+                    className: 'leaflet-marker-icon-no-border'
                 })
             }).bindPopup(`
             <div class="text-sm">
@@ -304,7 +287,25 @@ function Cadastro() {
         }
     };
 
-    // Obtém localização do usuário
+    const reutilizarDadosPosteAnterior = () => {
+        if (posteAnterior) {
+            // Cria um novo objeto sem as coordenadas e fotos
+            const { coords, fotos: _, ...dadosParaReutilizar } = posteAnterior;
+
+            // Atualiza o estado com os dados do poste anterior
+            Object.entries(dadosParaReutilizar).forEach(([key, value]) => {
+                if (key in initialState) { // Só atualiza campos que existem no estado inicial
+                    dispatch({ type: 'UPDATE_FIELD', field: key, value });
+                }
+            });
+
+            setReutilizarDados(true);
+            alert("Dados do poste anterior carregados! Agora atualize a localização.");
+        } else {
+            alert("Nenhum poste anterior encontrado para reutilizar dados.");
+        }
+    };
+
     const obterLocalizacaoUsuario = async () => {
         setLocalizacaoError(null);
         setIsLoadingLocation(true);
@@ -328,6 +329,16 @@ function Cadastro() {
 
             setUserCoords(newCoords);
             setUserAccuracy(accuracy);
+
+            // Limpa apenas fotos se estiver reutilizando dados
+            if (reutilizarDados) {
+                setFotos([]);
+                setReutilizarDados(false); // Reseta o flag
+            } else {
+                // Limpa tudo se for um novo poste
+                dispatch({ type: 'RESET' });
+                setFotos([]);
+            }
 
             try {
                 await fetchPostesCadastrados();
@@ -622,15 +633,17 @@ function Cadastro() {
             );
 
             if (response.data.success) {
-                // Atualiza estado para próximo poste
+                // Atualiza estado para próximo poste (incluindo todos os dados exceto fotos)
                 setPosteAnterior({
+                    ...state,
                     coords: [...userCoords],
+                    fotos: fotos.map(f => ({ tipo: f.tipo })), // Salva apenas os tipos para referência
                     timestamp: Date.now()
                 });
 
-                // Limpa o formulário
+                // Limpa apenas as fotos e coordenadas, mantendo outros dados se quiser reutilizar
                 setFotos([]);
-                dispatch({ type: 'RESET' });
+                setUserCoords(null);
 
                 // Atualiza mapa
                 await fetchPostesCadastrados();
@@ -670,6 +683,7 @@ function Cadastro() {
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                         <h2 className="text-xl font-semibold mb-3">Localização</h2>
 
+                        // No seu JSX, onde mostra os botões de localização:
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={obterLocalizacaoUsuario}
@@ -685,6 +699,15 @@ function Cadastro() {
                                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                                 >
                                     {mostrarMapa ? 'Ocultar Mapa' : 'Mostrar Mapa'}
+                                </button>
+                            )}
+
+                            {posteAnterior && (
+                                <button
+                                    onClick={reutilizarDadosPosteAnterior}
+                                    className={`px-4 py-2 rounded-md ${reutilizarDados ? 'bg-purple-800' : 'bg-purple-600 hover:bg-purple-700'} text-white`}
+                                >
+                                    {reutilizarDados ? 'Dados Prontos para Reuso' : 'Reutilizar Dados'}
                                 </button>
                             )}
                         </div>
@@ -797,7 +820,7 @@ function Cadastro() {
                                 { value: "Em frente", label: "Em frente" },
                                 { value: "Sem número", label: "Sem número" },
                                 { value: "Em frente ao oposto", label: "Em frente ao oposto" },
-                               
+
                             ]}
                             onChange={(value) => handleFieldChange('especieArvore', value)}
                         />
@@ -1142,7 +1165,7 @@ function Cadastro() {
                             label="Tipo de Cabo ?"
                             options={[
                                 { value: "Alumínio Nú", label: "Alumínio Nú" },
-                                { value: "Alumínio isolado XLPE", label: "Alumínio isolado XLPE" },
+                                { value: "Isolado XLPE", label: "Isolado XLPE" },
                                 { value: "Multiplexado", label: "Multiplexado" },
                                 { value: "Cobre Nú", label: "Cobre Nú" },
                             ]}
@@ -1188,9 +1211,10 @@ function Cadastro() {
                             options={[
                                 { value: "Acesso", label: "Acesso" },
                                 { value: "Alameda", label: "Alameda" },
+                                { value: "Anel Viário", label: "Anel Viário" },
                                 { value: "Avenida", label: "Avenida" },
                                 { value: "Estrada", label: "Estrada" },
-                                { value: "LMG", label: "LMG" },
+                                { value: "Rodovia", label: "Rodovia" },
                                 { value: "Rua", label: "Rua" },
                                 { value: "Travessa", label: "Travessa" },
                                 { value: "Viaduto", label: "Viaduto" },

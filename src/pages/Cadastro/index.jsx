@@ -681,9 +681,7 @@ function Cadastro() {
 
                     {/* Seção de Localização */}
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <h2 className="text-xl font-semibold mb-3">Localização</h2>
-
-                        // No seu JSX, onde mostra os botões de localização:
+                        <h2 className="text-xl font-semibold mb-3">Localização</h2>                     
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={obterLocalizacaoUsuario}

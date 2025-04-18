@@ -3,13 +3,12 @@ import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";
-import BotaoArvore from "../../components/botaoArvore.jsx";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-
+import { FaTrash } from "react-icons/fa6";
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -18,7 +17,6 @@ const TIPOS_FOTO = {
     ARVORE: 'ARVORE',
     TELECOM: 'TELECOM',
     LAMPADA: 'LAMPADA',
-
 };
 
 // Reducer para gerenciar o estado do formulário
@@ -27,7 +25,7 @@ function formReducer(state, action) {
         case 'UPDATE_FIELD':
             return { ...state, [action.field]: action.value };
         case 'RESET':
-            return initialState;
+            return { ...initialState, numeroIdentificacao: gerarNumeroAutomatico() };
         default:
             return state;
     }
@@ -36,6 +34,7 @@ function formReducer(state, action) {
 const initialState = {
     cidade: "",
     enderecoInput: "",
+    endereco: "",
     numero: "",
     cep: "",
     localizacao: "",
@@ -66,42 +65,24 @@ const initialState = {
     finalidadeInstalacao: "",
     especieArvore: "",
     distanciaEntrePostes: "",
+    numeroIdentificacao: "",
 };
 
-
+// Função para gerar número automático (movida para fora do componente)
+const gerarNumeroAutomatico = () => {
+    const numeroBase = Math.floor(10000 + Math.random() * 90000);
+    const digitoVerificador = Math.floor(Math.random() * 10);
+    return `${numeroBase}-${digitoVerificador}`;
+};
 
 function Cadastro() {
     // ==============================================
     // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
     // ==============================================
 
-    // Mova para dentro do componente usando useRef
-    const numerosUtilizadosRef = useRef([]);
-
-    const gerarNumeroAutomatico = () => {
-        let numero;
-        do {
-            const numeroBase = Math.floor(10000 + Math.random() * 90000);
-            const digitoVerificador = Math.floor(Math.random() * 10);
-            numero = `${numeroBase}-${digitoVerificador}`;
-        } while (numerosUtilizadosRef.current.includes(numero));
-
-        numerosUtilizadosRef.current.push(numero);
-        return numero;
-    };
-
-
-    // Estado inicial com número gerado automaticamente
-    const [state, dispatch] = useReducer(formReducer, {
-        ...initialState,
-        numeroIdentificacao: gerarNumeroAutomatico() // Já gera no primeiro render
-    });
-
-
     const [token, setToken] = useState(localStorage.getItem('token'));
     const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
     const usuarioId = decoded?.id;
-
 
     // Redireciona se não autenticado
     if (!usuarioId) {
@@ -117,8 +98,13 @@ function Cadastro() {
     // Referências do mapa
     const mapRef = useRef(null);
     const markersGroupRef = useRef(null);
+    const numerosUtilizadosRef = useRef([]);
 
     // Estados de controle
+    const [state, dispatch] = useReducer(formReducer, {
+        ...initialState,
+        numeroIdentificacao: gerarNumeroAutomatico()
+    });
 
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
@@ -133,7 +119,11 @@ function Cadastro() {
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [erroFotos, setErroFotos] = useState(null);
     const [reutilizarDados, setReutilizarDados] = useState(false);
-
+    const [fotoArvore, setFotoArvore] = useState(null);
+    const [especieArvore, setEspecieArvore] = useState("");
+    const [especieCustom, setEspecieCustom] = useState("");
+    const [erroFotoArvore, setErroFotoArvore] = useState(null);
+    const [erroEspecieArvore, setErroEspecieArvore] = useState(null);
 
     // Hook de localização
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
@@ -153,14 +143,16 @@ function Cadastro() {
 
     // Função auxiliar para comparar arrays
     function arraysEqual(a, b) {
-        return a && b && a.length === b.length && a.every((val, index) => val === b[index]);
+        if (!a || !b) return false;
+        return a.length === b.length && a.every((val, index) => val === b[index]);
     }
+
     // Preenche campos do endereço automaticamente
     useEffect(() => {
         if (endereco) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
             dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
-            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco }); // Novo
+            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
             dispatch({ type: 'UPDATE_FIELD', field: 'cep', value: endereco.cep || state.cep });
 
             if (!isNumeroManual) {
@@ -185,7 +177,11 @@ function Cadastro() {
         }
 
         return () => {
-            // Mantenha a limpeza como está
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
+            markersGroupRef.current = null;
         };
     }, [mostrarMapa, userCoords]);
 
@@ -195,7 +191,6 @@ function Cadastro() {
             addPostMarkers();
         }
     }, [postesCadastrados]);
-
 
     // ==============================================
     // SEÇÃO 4: FUNÇÕES PRINCIPAIS
@@ -220,11 +215,16 @@ function Cadastro() {
                 };
             });
 
-            const postesValidos = postesProcessados.filter(poste =>
-                poste.coords &&
-                !isNaN(poste.coords[0]) &&
-                !isNaN(poste.coords[1])
-            );
+            const postesValidos = postesProcessados
+                .filter(poste =>
+                    poste.coords &&
+                    !isNaN(poste.coords[0]) &&
+                    !isNaN(poste.coords[1])
+                )
+                .map(poste => ({
+                    ...poste,
+                    numeroIdentificacao: poste.numeroIdentificacao || poste.numero || poste.id
+                }));
 
             setPostesCadastrados(postesValidos);
             return postesValidos;
@@ -254,7 +254,6 @@ function Cadastro() {
             maxZoom: 19
         }).addTo(mapRef.current);
 
-        // Substitui MarkerClusterGroup por um simples FeatureGroup
         markersGroupRef.current = new L.FeatureGroup();
         mapRef.current.addLayer(markersGroupRef.current);
 
@@ -262,7 +261,7 @@ function Cadastro() {
         addPostMarkers();
     };
 
-    // Atualiza marcador do usuário (mantido igual)
+    // Atualiza marcador do usuário
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
 
@@ -280,52 +279,24 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-    // Adiciona marcadores dos postes com tratamento robusto
+    // Adiciona marcadores dos postes
     const addPostMarkers = () => {
         try {
-            // Verificação inicial dos requisitos
             if (!mapRef.current || !markersGroupRef.current) {
                 console.warn('Mapa ou grupo de marcadores não disponível');
                 return;
             }
 
-            // Limpa marcadores existentes
             markersGroupRef.current.clearLayers();
-
-            // Prepara bounds com base na localização do usuário (se existir)
             const bounds = userCoords ? L.latLngBounds([userCoords]) : L.latLngBounds([]);
 
-            // Função para extrair o número de identificação corretamente
-            const getNumeroIdentificacao = (poste) => {
-                // 1. Tenta numeroIdentificacao direto (mesmo se for string vazia)
-                if (poste.numeroIdentificacao !== undefined)
-                    return poste.numeroIdentificacao;
-
-                // 2. Tenta em attributes
-                if (poste.attributes?.numeroIdentificacao !== undefined)
-                    return poste.attributes.numeroIdentificacao;
-
-                // 3. Tenta outros campos alternativos
-                if (poste.numero !== undefined)
-                    return poste.numero;
-
-                if (poste.codigo !== undefined)
-                    return poste.codigo;
-
-                // 4. Fallback para ID
-                return `ID: ${poste.id || "N/E"}`;
-            };
-
-            // Processa cada poste
             postesCadastrados.forEach((poste, index) => {
                 try {
-                    // Verificação robusta das coordenadas
                     if (!poste?.coords || !Array.isArray(poste.coords) || poste.coords.length !== 2) {
                         console.warn(`Poste ${index} possui coordenadas inválidas:`, poste.coords);
                         return;
                     }
 
-                    // Converte e valida coordenadas
                     const [lat, lng] = poste.coords.map(coord => {
                         const num = Number(coord);
                         return isNaN(num) ? null : num;
@@ -336,15 +307,6 @@ function Cadastro() {
                         return;
                     }
 
-                    // DEBUG: Mostra estrutura completa do poste
-                    console.log(`Dados do poste ${index}:`, {
-                        id: poste.id,
-                        numeroIdentificacao: poste.numeroIdentificacao,
-                        attributes: poste.attributes,
-                        todosCampos: Object.keys(poste)
-                    });
-
-                    // Criação do marcador
                     const marker = L.marker([lat, lng], {
                         icon: L.divIcon({
                             html: `<div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>`,
@@ -353,13 +315,11 @@ function Cadastro() {
                         })
                     });
 
-                    // Cria popup com número de identificação
                     const popupContent = document.createElement('div');
                     popupContent.className = 'text-sm font-medium';
-                    popupContent.textContent = getNumeroIdentificacao(poste);
+                    popupContent.textContent = poste.numeroIdentificacao || `Poste ${index + 1}`;
                     marker.bindPopup(popupContent);
 
-                    // Adiciona ao grupo e estende os bounds
                     markersGroupRef.current.addLayer(marker);
                     bounds.extend([lat, lng]);
 
@@ -368,7 +328,6 @@ function Cadastro() {
                 }
             });
 
-            // Ajusta a visualização do mapa se houver marcadores válidos
             if (bounds.isValid()) {
                 try {
                     const sw = bounds.getSouthWest();
@@ -394,16 +353,13 @@ function Cadastro() {
 
     const reutilizarDadosPosteAnterior = () => {
         if (posteAnterior) {
-            // Cria um novo objeto sem as coordenadas e fotos
             const { coords, fotos: _, ...dadosParaReutilizar } = posteAnterior;
+            const novoNumero = gerarNumeroAutomatico();
 
-            // Mantém o número anterior OU gera um novo
-            const novoNumero = dadosParaReutilizar.numeroIdentificacao || gerarNumeroAutomatico()
             dispatch({ type: 'UPDATE_FIELD', field: 'numeroIdentificacao', value: novoNumero });
 
-            // Atualiza o estado com os dados do poste anterior
             Object.entries(dadosParaReutilizar).forEach(([key, value]) => {
-                if (key in initialState) { // Só atualiza campos que existem no estado inicial
+                if (key in initialState) {
                     dispatch({ type: 'UPDATE_FIELD', field: key, value });
                 }
             });
@@ -439,12 +395,10 @@ function Cadastro() {
             setUserCoords(newCoords);
             setUserAccuracy(accuracy);
 
-            // Limpa apenas fotos se estiver reutilizando dados
             if (reutilizarDados) {
                 setFotos([]);
-                setReutilizarDados(false); // Reseta o flag
+                setReutilizarDados(false);
             } else {
-                // Limpa tudo se for um novo poste
                 dispatch({ type: 'RESET' });
                 setFotos([]);
             }
@@ -497,7 +451,6 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
-
     // Helper para nomes de tipos de foto
     const getNomeTipoFoto = (tipo) => {
         const nomes = {
@@ -511,16 +464,12 @@ function Cadastro() {
     };
 
     const handleAdicionarFoto = async (tipo, arquivoOuObjeto, metadados = {}) => {
-        console.log('Adicionando foto:', { tipo, arquivoOuObjeto, metadados });
-
         try {
             let arquivo, dadosAdicionais = {};
 
-            // Verifica se veio do BotaoArvore (objeto) ou dos outros botões (File direto)
             if (arquivoOuObjeto instanceof File) {
                 arquivo = arquivoOuObjeto;
             } else if (arquivoOuObjeto?.file instanceof File) {
-                // Caso do BotaoArvore que envia {file, especie, coords}
                 arquivo = arquivoOuObjeto.file;
                 dadosAdicionais = {
                     especie: arquivoOuObjeto.especie,
@@ -530,22 +479,16 @@ function Cadastro() {
                 throw new Error('Formato de arquivo não suportado');
             }
 
-            if (!arquivo || !(arquivo instanceof File) || arquivo.size === 0) {
-                throw new Error('Arquivo inválido ou vazio');
-            }
+            const novaFoto = {
+                arquivo,
+                tipo,
+                ...dadosAdicionais,
+                ...metadados,
+                id: `${tipo}-${Date.now()}`,
+                nome: getNomeTipoFoto(tipo)
+            };
 
-            setFotos(prev => [
-                ...prev.filter(f => f.tipo !== tipo),
-                {
-                    arquivo,
-                    tipo,
-                    ...dadosAdicionais,
-                    ...metadados,
-                    id: `${tipo}-${Date.now()}`,
-                    nome: getNomeTipoFoto(tipo)
-                }
-            ]);
-
+            setFotos(prev => [...prev.filter(f => f.tipo !== tipo), novaFoto]);
             return true;
         } catch (error) {
             console.error('Erro em handleAdicionarFoto:', error);
@@ -554,35 +497,11 @@ function Cadastro() {
         }
     };
 
-    
-
-    // Handlers específicos (simplificados)
-    // Handlers para fotos simples (File direto)
-    const handleFotoPanoramica = async (fotoFile) => {
-        return handleAdicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
-    };
-
-    const handleFotoLuminaria = async (fotoFile) => {
-        return handleAdicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
-    };
-
-    const handleFotoTelecom = async (fotoFile) => {
-        return handleAdicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
-    };
-
-    const handleFoto2TipoLuminaria = async (fotoFile) => {
-        return handleAdicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
-    };
-
-    // Handler para árvore já está correto no seu BotaoArvore
-    // Ele envia um objeto {file, especie, coords} que será tratado na handleAdicionarFoto
-
     // Verificação robusta de fotos obrigatórias
     const verificarFotos = () => {
         const tiposObrigatorios = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
         const nomesObrigatorios = tiposObrigatorios.map(getNomeTipoFoto);
 
-        // Filtra apenas fotos válidas (com arquivo real)
         const fotosValidas = fotos.filter(foto =>
             foto.arquivo instanceof File &&
             foto.arquivo.size > 0 &&
@@ -633,11 +552,8 @@ function Cadastro() {
         window.location.href = '/login';
     };
 
-
-
     // Salva o cadastro
     const handleSalvarCadastro = async () => {
-        // Verifica fotos obrigatórias primeiro
         if (!verificarFotos()) return;
 
         if (!userCoords || userCoords.length < 2) {
@@ -645,10 +561,9 @@ function Cadastro() {
             return;
         }
 
-        // Lista de campos obrigatórios e seus nomes para exibição
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
-            { campo: 'endereco', nome: 'Endereço' }, // Alterado de enderecoInput para endereco
+            { campo: 'endereco', nome: 'Endereço' },
             { campo: 'numero', nome: 'Número' },
             { campo: 'cep', nome: 'CEP' },
             { campo: 'transformador', nome: 'Transformador' },
@@ -659,7 +574,6 @@ function Cadastro() {
             { campo: 'potenciaLampada', nome: 'Potência da Lâmpada' }
         ];
 
-        // Verifica campos faltantes
         const camposFaltantes = camposObrigatorios
             .filter(({ campo }) => !state[campo])
             .map(({ nome }) => nome);
@@ -670,7 +584,6 @@ function Cadastro() {
         }
 
         try {
-            // Calcula distância se tiver poste anterior
             let distancia = 0;
             if (posteAnterior && userCoords) {
                 distancia = calcularDistancia(
@@ -684,10 +597,9 @@ function Cadastro() {
 
             const formData = new FormData();
 
-            // Adiciona campos ao formData - agora mapeando enderecoInput para endereco
             Object.entries({
                 ...state,
-                endereco: state.enderecoInput // Mapeia enderecoInput para endereco
+                endereco: state.enderecoInput
             }).forEach(([key, value]) => {
                 if (value !== undefined && value !== null) {
                     formData.append(key, value);
@@ -697,24 +609,27 @@ function Cadastro() {
             formData.append('coords', JSON.stringify(userCoords));
             formData.append('usuarioId', usuarioId);
             formData.append('isLastPost', isLastPost.toString());
+            // Antes de enviar, prepare os dados das árvores
+            const arvoresData = fotos
+                .filter(foto => foto.tipo === TIPOS_FOTO.ARVORE)
+                .map(foto => ({
+                    especie: foto.especie || '',
+                    coords: foto.coords || null,
+                    tempId: foto.id // Adicione um ID temporário para relacionar com as fotos
+                }));
 
-            // Adiciona fotos
+            // Adicione ao formData
+            formData.append('arvores', JSON.stringify(arvoresData));
+
+            // Depois envie as fotos normalmente
             fotos.forEach((foto) => {
                 formData.append('fotos', foto.arquivo);
                 formData.append('tipos', foto.tipo);
 
-                if (foto.especie) {
-                    formData.append('especieArvore', foto.especieArvore);
+                // Para fotos de árvores, adicione o ID temporário
+                if (foto.tipo === TIPOS_FOTO.ARVORE) {
+                    formData.append('arvoreId', foto.id);
                 }
-                if (foto.coords) {
-                    formData.append('coordsArvore', JSON.stringify(foto.coords));
-                }
-            });
-
-            console.log("Dados a serem enviados:", {
-                ...state,
-                endereco: state.enderecoInput,
-                fotos: fotos.map(f => f.tipo)
             });
 
             const response = await axios.post(
@@ -730,28 +645,19 @@ function Cadastro() {
             );
 
             if (response.data.success) {
-                // Atualiza estado para próximo poste (incluindo todos os dados exceto fotos)
                 setPosteAnterior({
                     ...state,
                     coords: [...userCoords],
-                    fotos: fotos.map(f => ({ tipo: f.tipo })), // Salva apenas os tipos para referência
+                    fotos: fotos.map(f => ({ tipo: f.tipo })),
                     timestamp: Date.now()
                 });
 
-                // Limpa apenas as fotos e coordenadas, mantendo outros dados se quiser reutilizar
                 setFotos([]);
                 setUserCoords(null);
 
-
-                // Atualiza mapa
                 await fetchPostesCadastrados();
                 setMostrarMapa(false);
                 setTimeout(() => setMostrarMapa(true), 100);
-                console.log('Dados do cadastro:', {
-                    state: state,
-                    fotos: fotos.map(f => f.tipo),
-                    userCoords: userCoords
-                });
 
                 alert("Cadastro salvo com sucesso!");
             }
@@ -891,8 +797,8 @@ function Cadastro() {
                                 type="text"
                                 value={state.enderecoInput}
                                 onChange={(e) => {
-                                    dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
-                                    dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value }); // Atualiza ambos
+                                    handleFieldChange('enderecoInput', e.target.value);
+                                    handleFieldChange('endereco', e.target.value);
                                 }}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -937,18 +843,12 @@ function Cadastro() {
                                 { value: "Em frente", label: "Em frente" },
                                 { value: "Sem número", label: "Sem número" },
                                 { value: "Em frente ao oposto", label: "Em frente ao oposto" },
-
                             ]}
                             onChange={(value) => handleFieldChange('emFrente', value)}
                         />
-
                     </div>
 
-
-
                     {/* Seção de Fotos */}
-
-                    {/* Foto Panorâmica */}
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-panoramica"
@@ -957,7 +857,6 @@ function Cadastro() {
                             obrigatorio={true}
                             erro={erroFotos?.includes('Panorâmica')}
                         />
-
                         <p className="text-center text-sm mt-2 font-medium">
                             PANORÂMICA<span className="text-red-500">*</span>
                             {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) ? (
@@ -968,7 +867,6 @@ function Cadastro() {
                         </p>
                     </div>
 
-                    {/* Foto da Luminária */}
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-Luminaria"
@@ -987,10 +885,8 @@ function Cadastro() {
                         </p>
                     </div>
 
-
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                    {/* Foto Telecon (opcional) */}
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-telecom"
@@ -1007,12 +903,10 @@ function Cadastro() {
                                 <span className="text-gray-500 ml-2">(Opcional)</span>
                             )}
                         </p>
-
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                    {/* 2° Tipo de lâmpada (opcional) */}
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-Lampada"
@@ -1021,7 +915,6 @@ function Cadastro() {
                             obrigatorio={false}
                             erro={erroFotos?.includes('Lampada')}
                         />
-
                         <p className="text-center text-sm mt-2 font-medium">
                             LÂMPADA<span className="text-red-500"></span>
                             {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADA) ? (
@@ -1030,91 +923,145 @@ function Cadastro() {
                                 <span className="text-gray-500 ml-2">(Opcional)</span>
                             )}
                         </p>
-
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
+                    {/* Seção de Árvore */}
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+                        <h3 className="text-lg font-medium mb-3">Registro de Árvores</h3>
 
-                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <BotaoArvore
-                            id="foto-arvore"
-                            label="Foto da Árvore (Opcional)"
-                            onFotoCapturada={async (dados) => {
-                                console.group('[DEBUG] Foto Árvore - Dados Recebidos');
-                                console.log('Tipo do dado:', typeof dados);
-                                console.log('Conteúdo:', dados);
-                                console.groupEnd();
+                        <div className="mb-4 space-y-2 max-h-60 overflow-y-auto p-2 bg-gray-100 rounded">
+                            {fotos
+                                .filter(f => f.tipo === TIPOS_FOTO.ARVORE)
+                                .map((foto, index) => (
+                                    <div key={`arvore-${index}`} className="flex items-center gap-3 p-2 bg-white rounded border">
+                                        <div className="flex-shrink-0 w-12 h-12 border rounded overflow-hidden">
+                                            <img
+                                                src={foto.arquivo ? URL.createObjectURL(foto.arquivo) : ''}
+                                                alt={`Árvore ${index + 1}`}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
 
-                                try {
-                                    // Validação cross-platform
-                                    const file = dados.file || dados;
-                                    const especie = dados.especie || 'Não identificada';
-                                    const coords = dados.coords || userCoords;
+                                        <div className="flex-grow">
+                                            <div className="text-sm font-medium">Árvore {index + 1}</div>
+                                            <div className="text-xs text-gray-600">
+                                                Espécie: <span className="font-semibold">{foto.especie || 'Não definida'}</span>
+                                            </div>
+                                        </div>
 
-                                    if (!file || !(file instanceof File)) {
-                                        throw new Error(
-                                            `Tipo de arquivo inválido: ${typeof file}. Esperado File, recebido ${file?.constructor?.name}`
-                                        );
-                                    }
+                                        <button
+                                            onClick={() => {
+                                                const novasFotos = fotos.filter((_, i) => i !== index);
+                                                setFotos(novasFotos);
+                                            }}
+                                            className="text-red-500 hover:text-red-700 p-1"
+                                            title="Remover esta árvore"
+                                        >
+                                            <FaTrash size={14} />
+                                        </button>
+                                    </div>
+                                ))}
 
-                                    console.log('Metadados da foto:', {
-                                        tamanho: `${(file.size / 1024).toFixed(2)} KB`,
-                                        tipo: file.type,
-                                        últimaModificação: new Date(file.lastModified).toLocaleString()
-                                    });
+                            {fotos.filter(f => f.tipo === TIPOS_FOTO.ARVORE).length === 0 && (
+                                <div className="text-center text-gray-500 py-4">
+                                    Nenhuma árvore registrada ainda
+                                </div>
+                            )}
+                        </div>
 
-                                    // Adição com fallback para mobile
-                                    const fotoAdicionada = await handleAdicionarFoto(
-                                        TIPOS_FOTO.ARVORE,
-                                        {
-                                            file,
-                                            especie,
-                                            coords,
-                                            dispositivo: /Mobi|Android/i.test(navigator.userAgent)
-                                                ? 'mobile'
-                                                : 'desktop'
-                                        }
-                                    );
+                        <div className="border-t pt-4">
+                            <h4 className="font-medium mb-3 text-center">
+                                {fotos.some(f => f.tipo === TIPOS_FOTO.ARVORE)
+                                    ? "➕ Adicionar outra árvore"
+                                    : "📷 Adicionar primeira árvore"}
+                            </h4>
 
-                                    if (!fotoAdicionada) {
-                                        throw new Error('Falha no estado interno');
-                                    }
+                            <div className="flex justify-center mb-3">
+                                <BotaoCamera
+                                    id="nova-foto-arvore"
+                                    label={fotoArvore ? "🔄 Capturar Novamente" : "📸 Tirar Foto da Árvore"}
+                                    onFotoCapturada={(file) => {
+                                        setFotoArvore(file);
+                                        setEspecieArvore("");
+                                        setEspecieCustom("");
+                                    }}
+                                />
+                            </div>
 
-                                    dispatch({
-                                        type: 'UPDATE_FIELD',
-                                        field: 'especieArvore',
-                                        value: especie
-                                    });
+                            {fotoArvore && (
+                                <div className="mt-4 space-y-3">
+                                    <div className="flex flex-col items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                        <div className="text-sm font-medium mb-2">Pré-visualização</div>
+                                        <img
+                                            src={URL.createObjectURL(fotoArvore)}
+                                            alt="Nova árvore"
+                                            className="w-24 h-24 object-cover rounded border-2 border-blue-300"
+                                        />
+                                    </div>
 
-                                    console.log('[SUCESSO] Foto processada:', {
-                                        especie,
-                                        coordenadas: coords,
-                                        dispositivo: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop'
-                                    });
+                                    <ComboBox
+                                        label="Selecione a espécie desta árvore"
+                                        value={especieArvore}
+                                        options={[
+                                            { value: "", label: "Selecione..." },
+                                            { value: "Sibipuruna", label: "Sibipuruna" },
+                                            { value: "Oiti", label: "Oiti" },
+                                            { value: "Outra", label: "Outra espécie" },
+                                        ]}
+                                        onChange={(value) => {
+                                            setEspecieArvore(value);
+                                            if (value !== "Outra") setEspecieCustom("");
+                                        }}
+                                    />
 
-                                } catch (error) {
-                                    console.error('[ERRO] Processamento foto árvore:', {
-                                        erro: error.message,
-                                        stack: error.stack,
-                                        userAgent: navigator.userAgent,
-                                        coordsDisponíveis: !!userCoords
-                                    });
+                                    {especieArvore === "Outra" && (
+                                        <div className="mt-2">
+                                            <input
+                                                type="text"
+                                                value={especieCustom}
+                                                onChange={(e) => setEspecieCustom(e.target.value)}
+                                                placeholder="Digite o nome da espécie"
+                                                className="w-full px-3 py-2 border rounded-md"
+                                            />
+                                        </div>
+                                    )}
 
-                                    setErroFotos(`Erro na foto da árvore: ${error.message}`);
-                                }
-                            }}
-                            obrigatorio={false}
-                            erro={erroFotos?.includes('ARVORE')}
-                            userCoords={userCoords}
-                            debugMode={true} // Adicione esta prop ao componente BotaoArvore
-                        />
-                        
+                                    <button
+                                        onClick={() => {
+                                            if (!especieArvore || (especieArvore === "Outra" && !especieCustom.trim())) {
+                                                alert("Por favor, selecione ou digite a espécie da árvore");
+                                                return;
+                                            }
+
+                                            const especieFinal = especieArvore === "Outra" ? especieCustom : especieArvore;
+                                            const novaFoto = {
+                                                tipo: TIPOS_FOTO.ARVORE,
+                                                arquivo: fotoArvore,
+                                                especie: especieFinal,
+                                                coords: userCoords,
+                                                id: `arvore-${Date.now()}`
+                                            };
+
+                                            setFotos([...fotos, novaFoto]);
+                                            handleFieldChange('especieArvore', especieFinal);
+
+                                            setFotoArvore(null);
+                                            setEspecieArvore("");
+                                            setEspecieCustom("");
+                                        }}
+                                        className="w-full py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
+                                    >
+                                        Confirmar Árvore
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                    {/* Mensagem de validação */}
                     <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
                         <p>Fotos marcadas com <span className="font-bold">*</span> são obrigatórias</p>
                     </div>
@@ -1492,7 +1439,6 @@ function Cadastro() {
                         />
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
                     </div>
 
                     {/* Botão de Salvar */}
@@ -1512,10 +1458,8 @@ function Cadastro() {
                         </button>
                     </div>
                 </div>
-            </div >
-        </div >
-
-
+            </div>
+        </div>
     );
 }
 

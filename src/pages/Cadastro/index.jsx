@@ -39,6 +39,7 @@ const initialState = {
     numero: "",
     cep: "",
     localizacao: "",
+    emFrente: "",
     transformador: "",
     medicao: "",
     telecom: "",
@@ -67,14 +68,40 @@ const initialState = {
     distanciaEntrePostes: "",
 };
 
+
+
 function Cadastro() {
     // ==============================================
     // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
     // ==============================================
 
+    // Mova para dentro do componente usando useRef
+    const numerosUtilizadosRef = useRef([]);
+
+    const gerarNumeroAutomatico = () => {
+        let numero;
+        do {
+            const numeroBase = Math.floor(10000 + Math.random() * 90000);
+            const digitoVerificador = Math.floor(Math.random() * 10);
+            numero = `${numeroBase}-${digitoVerificador}`;
+        } while (numerosUtilizadosRef.current.includes(numero));
+
+        numerosUtilizadosRef.current.push(numero);
+        return numero;
+    };
+
+
+    // Estado inicial com número gerado automaticamente
+    const [state, dispatch] = useReducer(formReducer, {
+        ...initialState,
+        numeroIdentificacao: gerarNumeroAutomatico() // Já gera no primeiro render
+    });
+
+
     const [token, setToken] = useState(localStorage.getItem('token'));
     const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
     const usuarioId = decoded?.id;
+
 
     // Redireciona se não autenticado
     if (!usuarioId) {
@@ -92,7 +119,7 @@ function Cadastro() {
     const markersGroupRef = useRef(null);
 
     // Estados de controle
-    const [state, dispatch] = useReducer(formReducer, initialState);
+
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
     const [mostrarMapa, setMostrarMapa] = useState(false);
@@ -106,6 +133,7 @@ function Cadastro() {
     const [isNumeroManual, setIsNumeroManual] = useState(false);
     const [erroFotos, setErroFotos] = useState(null);
     const [reutilizarDados, setReutilizarDados] = useState(false);
+
 
     // Hook de localização
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
@@ -167,6 +195,7 @@ function Cadastro() {
             addPostMarkers();
         }
     }, [postesCadastrados]);
+
 
     // ==============================================
     // SEÇÃO 4: FUNÇÕES PRINCIPAIS
@@ -251,39 +280,115 @@ function Cadastro() {
             .bindPopup('<div class="text-sm font-medium text-blue-600">Sua localização atual</div>');
     };
 
-    // Adiciona marcadores dos postes (simplificado)
+    // Adiciona marcadores dos postes com tratamento robusto
     const addPostMarkers = () => {
-        if (!mapRef.current || !markersGroupRef.current) return;
+        try {
+            // Verificação inicial dos requisitos
+            if (!mapRef.current || !markersGroupRef.current) {
+                console.warn('Mapa ou grupo de marcadores não disponível');
+                return;
+            }
 
-        markersGroupRef.current.clearLayers();
-        const bounds = L.latLngBounds(userCoords ? [userCoords] : []);
+            // Limpa marcadores existentes
+            markersGroupRef.current.clearLayers();
 
-        postesCadastrados.forEach((poste, index) => {
-            if (!poste.coords || !Array.isArray(poste.coords)) return;
+            // Prepara bounds com base na localização do usuário (se existir)
+            const bounds = userCoords ? L.latLngBounds([userCoords]) : L.latLngBounds([]);
 
-            const coords = poste.coords.map(Number);
-            if (coords.some(isNaN)) return;
+            // Função para extrair o número de identificação corretamente
+            const getNumeroIdentificacao = (poste) => {
+                // 1. Tenta numeroIdentificacao direto (mesmo se for string vazia)
+                if (poste.numeroIdentificacao !== undefined)
+                    return poste.numeroIdentificacao;
 
-            const marker = L.marker(coords, {
-                icon: L.divIcon({
-                    html: `<div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>`,
-                    iconSize: [10, 10],
-                    className: 'leaflet-marker-icon-no-border'
-                })
-            }).bindPopup(`
-            <div class="text-sm">
-                <b>Poste #${index + 1}</b><br>
-                ${poste.endereco || 'Endereço não disponível'}<br>
-                <small>Cidade: ${poste.cidade || 'Não informada'}</small>
-            </div>
-        `);
+                // 2. Tenta em attributes
+                if (poste.attributes?.numeroIdentificacao !== undefined)
+                    return poste.attributes.numeroIdentificacao;
 
-            markersGroupRef.current.addLayer(marker);
-            bounds.extend(coords);
-        });
+                // 3. Tenta outros campos alternativos
+                if (poste.numero !== undefined)
+                    return poste.numero;
 
-        if (bounds.isValid()) {
-            mapRef.current.fitBounds(bounds.pad(0.2));
+                if (poste.codigo !== undefined)
+                    return poste.codigo;
+
+                // 4. Fallback para ID
+                return `ID: ${poste.id || "N/E"}`;
+            };
+
+            // Processa cada poste
+            postesCadastrados.forEach((poste, index) => {
+                try {
+                    // Verificação robusta das coordenadas
+                    if (!poste?.coords || !Array.isArray(poste.coords) || poste.coords.length !== 2) {
+                        console.warn(`Poste ${index} possui coordenadas inválidas:`, poste.coords);
+                        return;
+                    }
+
+                    // Converte e valida coordenadas
+                    const [lat, lng] = poste.coords.map(coord => {
+                        const num = Number(coord);
+                        return isNaN(num) ? null : num;
+                    });
+
+                    if (lat === null || lng === null) {
+                        console.warn(`Poste ${index} possui coordenadas não numéricas:`, poste.coords);
+                        return;
+                    }
+
+                    // DEBUG: Mostra estrutura completa do poste
+                    console.log(`Dados do poste ${index}:`, {
+                        id: poste.id,
+                        numeroIdentificacao: poste.numeroIdentificacao,
+                        attributes: poste.attributes,
+                        todosCampos: Object.keys(poste)
+                    });
+
+                    // Criação do marcador
+                    const marker = L.marker([lat, lng], {
+                        icon: L.divIcon({
+                            html: `<div class="flex items-center justify-center w-3 h-3 rounded-full bg-green-800"></div>`,
+                            iconSize: [10, 10],
+                            className: 'leaflet-marker-icon-no-border'
+                        })
+                    });
+
+                    // Cria popup com número de identificação
+                    const popupContent = document.createElement('div');
+                    popupContent.className = 'text-sm font-medium';
+                    popupContent.textContent = getNumeroIdentificacao(poste);
+                    marker.bindPopup(popupContent);
+
+                    // Adiciona ao grupo e estende os bounds
+                    markersGroupRef.current.addLayer(marker);
+                    bounds.extend([lat, lng]);
+
+                } catch (error) {
+                    console.error(`Erro ao processar poste ${index}:`, error, poste);
+                }
+            });
+
+            // Ajusta a visualização do mapa se houver marcadores válidos
+            if (bounds.isValid()) {
+                try {
+                    const sw = bounds.getSouthWest();
+                    const ne = bounds.getNorthEast();
+
+                    if (sw && ne && (sw.lat !== ne.lat || sw.lng !== ne.lng)) {
+                        mapRef.current.fitBounds(bounds.pad(0.2), {
+                            maxZoom: 18,
+                            animate: true
+                        });
+                    } else if (userCoords) {
+                        mapRef.current.setView(userCoords, 15);
+                    }
+                } catch (e) {
+                    console.error('Erro ao ajustar bounds:', e);
+                }
+            }
+
+        } catch (error) {
+            console.error('Erro crítico em addPostMarkers:', error);
         }
     };
 
@@ -291,6 +396,10 @@ function Cadastro() {
         if (posteAnterior) {
             // Cria um novo objeto sem as coordenadas e fotos
             const { coords, fotos: _, ...dadosParaReutilizar } = posteAnterior;
+
+            // Mantém o número anterior OU gera um novo
+            const novoNumero = dadosParaReutilizar.numeroIdentificacao || gerarNumeroAutomatico()
+            dispatch({ type: 'UPDATE_FIELD', field: 'numeroIdentificacao', value: novoNumero });
 
             // Atualiza o estado com os dados do poste anterior
             Object.entries(dadosParaReutilizar).forEach(([key, value]) => {
@@ -388,44 +497,6 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
-    // Adiciona foto ao estado
-    const adicionarFoto = (tipo, fotoFile) => {
-        if (!fotoFile) {
-            console.error(`Nenhum arquivo recebido para: ${tipo}`);
-            return;
-        }
-
-        if (!(fotoFile instanceof File)) {
-            console.error(`Tipo de arquivo inválido para: ${tipo}`, fotoFile);
-            alert(`O arquivo para ${tipo} não é válido`);
-            return;
-        }
-
-        if (fotoFile.size > 5 * 1024 * 1024) {
-            alert('A foto é muito grande (máximo 5MB)');
-            return;
-        }
-
-        // Verifica tipo de imagem
-        if (!fotoFile.type.startsWith('image/')) {
-            alert('Por favor, envie apenas imagens');
-            return;
-        }
-
-        setFotos(prev => [
-            ...prev.filter(f => f.tipo !== tipo),
-            {
-                arquivo: fotoFile,
-                tipo: tipo,
-                coords: userCoords,
-                id: `${tipo}-${Date.now()}`,
-                nome: tipo === TIPOS_FOTO.PANORAMICA ? 'Panorâmica' :
-                    tipo === TIPOS_FOTO.LUMINARIA ? 'Luminária' :
-                        tipo === TIPOS_FOTO.TELECOM ? 'Telecom' :
-                            '2° Tipo Luminária'
-            }
-        ]);
-    };
 
     // Helper para nomes de tipos de foto
     const getNomeTipoFoto = (tipo) => {
@@ -435,55 +506,76 @@ function Cadastro() {
             [TIPOS_FOTO.TELECOM]: 'Telecom',
             [TIPOS_FOTO.ARVORE]: 'Árvore',
             [TIPOS_FOTO.LAMPADA]: '2° Tipo Luminária'
-
         };
         return nomes[tipo] || 'Desconhecido';
     };
 
-    // Handlers para fotos (agora assíncronos)
-    const handleFotoPanoramica = async (fotoFile) => {
+    const handleAdicionarFoto = async (tipo, arquivoOuObjeto, metadados = {}) => {
+        console.log('Adicionando foto:', { tipo, arquivoOuObjeto, metadados });
+
         try {
-            console.log('Antes de adicionar - Panorâmica:', file);
-            await adicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
-            console.log('Depois de adicionar - Panorâmica:', fotos);
+            let arquivo, dadosAdicionais = {};
+
+            // Verifica se veio do BotaoArvore (objeto) ou dos outros botões (File direto)
+            if (arquivoOuObjeto instanceof File) {
+                arquivo = arquivoOuObjeto;
+            } else if (arquivoOuObjeto?.file instanceof File) {
+                // Caso do BotaoArvore que envia {file, especie, coords}
+                arquivo = arquivoOuObjeto.file;
+                dadosAdicionais = {
+                    especie: arquivoOuObjeto.especie,
+                    coords: arquivoOuObjeto.coords || userCoords
+                };
+            } else {
+                throw new Error('Formato de arquivo não suportado');
+            }
+
+            if (!arquivo || !(arquivo instanceof File) || arquivo.size === 0) {
+                throw new Error('Arquivo inválido ou vazio');
+            }
+
+            setFotos(prev => [
+                ...prev.filter(f => f.tipo !== tipo),
+                {
+                    arquivo,
+                    tipo,
+                    ...dadosAdicionais,
+                    ...metadados,
+                    id: `${tipo}-${Date.now()}`,
+                    nome: getNomeTipoFoto(tipo)
+                }
+            ]);
+
             return true;
         } catch (error) {
-            alert(error.message);
+            console.error('Erro em handleAdicionarFoto:', error);
+            setErroFotos(`Erro ao adicionar foto: ${error.message}`);
             return false;
         }
+    };
+
+    
+
+    // Handlers específicos (simplificados)
+    // Handlers para fotos simples (File direto)
+    const handleFotoPanoramica = async (fotoFile) => {
+        return handleAdicionarFoto(TIPOS_FOTO.PANORAMICA, fotoFile);
     };
 
     const handleFotoLuminaria = async (fotoFile) => {
-        try {
-            console.log('Antes de adicionar - Luminaria:', file);
-            await adicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
-            console.log('Depois de adicionar - Luminaria:', fotos);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+        return handleAdicionarFoto(TIPOS_FOTO.LUMINARIA, fotoFile);
     };
 
-    const handleFotoTelecon = async (fotoFile) => {
-        try {
-            await adicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+    const handleFotoTelecom = async (fotoFile) => {
+        return handleAdicionarFoto(TIPOS_FOTO.TELECOM, fotoFile);
     };
 
     const handleFoto2TipoLuminaria = async (fotoFile) => {
-        try {
-            await adicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
-            return true;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
+        return handleAdicionarFoto(TIPOS_FOTO.LAMPADA, fotoFile);
     };
+
+    // Handler para árvore já está correto no seu BotaoArvore
+    // Ele envia um objeto {file, especie, coords} que será tratado na handleAdicionarFoto
 
     // Verificação robusta de fotos obrigatórias
     const verificarFotos = () => {
@@ -504,15 +596,11 @@ function Cadastro() {
 
         if (fotosFaltantes.length > 0) {
             const mensagem = `Fotos obrigatórias faltando:\n${fotosFaltantes.map(t => `- ${getNomeTipoFoto(t)}`).join('\n')}`;
+            setErroFotos(mensagem);
 
-            // Melhor feedback visual (substitua por seu sistema de notificação)
-            const faltantesStr = fotosFaltantes.map(getNomeTipoFoto).join(', ');
-            setErroFotos(`Adicione: ${faltantesStr}`);
-
-            // Rolagem para a primeira foto faltante
             setTimeout(() => {
                 const primeiroTipoFaltante = fotosFaltantes[0];
-                const elemento = document.getElementById(`botao-camera-${primeiroTipoFaltante}`);
+                const elemento = document.getElementById(`botao-camera-${primeiroTipoFaltante.toLowerCase()}`);
                 elemento?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
 
@@ -544,6 +632,8 @@ function Cadastro() {
         localStorage.removeItem('token');
         window.location.href = '/login';
     };
+
+
 
     // Salva o cadastro
     const handleSalvarCadastro = async () => {
@@ -612,6 +702,13 @@ function Cadastro() {
             fotos.forEach((foto) => {
                 formData.append('fotos', foto.arquivo);
                 formData.append('tipos', foto.tipo);
+
+                if (foto.especie) {
+                    formData.append('especieArvore', foto.especieArvore);
+                }
+                if (foto.coords) {
+                    formData.append('coordsArvore', JSON.stringify(foto.coords));
+                }
             });
 
             console.log("Dados a serem enviados:", {
@@ -645,10 +742,16 @@ function Cadastro() {
                 setFotos([]);
                 setUserCoords(null);
 
+
                 // Atualiza mapa
                 await fetchPostesCadastrados();
                 setMostrarMapa(false);
                 setTimeout(() => setMostrarMapa(true), 100);
+                console.log('Dados do cadastro:', {
+                    state: state,
+                    fotos: fotos.map(f => f.tipo),
+                    userCoords: userCoords
+                });
 
                 alert("Cadastro salvo com sucesso!");
             }
@@ -681,7 +784,23 @@ function Cadastro() {
 
                     {/* Seção de Localização */}
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <h2 className="text-xl font-semibold mb-3">Localização</h2>                     
+                        <h2 className="text-xl font-semibold mb-3">Localização</h2>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Número do Poste
+                            </label>
+                            <input
+                                type="text"
+                                value={state.numeroIdentificacao || ""}
+                                onChange={(e) => handleFieldChange('numeroIdentificacao', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Número gerado automaticamente - edite se necessário
+                            </p>
+                        </div>
+
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={obterLocalizacaoUsuario}
@@ -820,10 +939,12 @@ function Cadastro() {
                                 { value: "Em frente ao oposto", label: "Em frente ao oposto" },
 
                             ]}
-                            onChange={(value) => handleFieldChange('especieArvore', value)}
+                            onChange={(value) => handleFieldChange('emFrente', value)}
                         />
 
                     </div>
+
+
 
                     {/* Seção de Fotos */}
 
@@ -832,17 +953,17 @@ function Cadastro() {
                         <BotaoCamera
                             id="foto-panoramica"
                             label="Foto Panorâmica"
-                            onFotoCapturada={(file) => {
-                                console.log('Arquivo recebido (Panorâmica):', file);
-                                adicionarFoto(TIPOS_FOTO.PANORAMICA, file);
-                            }}
+                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.PANORAMICA, file)}
                             obrigatorio={true}
                             erro={erroFotos?.includes('Panorâmica')}
                         />
+
                         <p className="text-center text-sm mt-2 font-medium">
-                            PANORÂMICA <span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) && (
-                                <span className="text-green-500 ml-2">✓</span>
+                            PANORÂMICA<span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) ? (
+                                <span className="text-green-500 ml-2">✓ Adicionada</span>
+                            ) : (
+                                <span className="text-gray-500 ml-2">(Obrigatória)</span>
                             )}
                         </p>
                     </div>
@@ -850,19 +971,18 @@ function Cadastro() {
                     {/* Foto da Luminária */}
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
-                            id="foto-luminaria"
-                            label="Foto da Luminária"
-                            onFotoCapturada={(file) => {
-                                console.log('Arquivo recebido (Luminária):', file);
-                                adicionarFoto(TIPOS_FOTO.LUMINARIA, file);
-                            }}
+                            id="foto-Luminaria"
+                            label="Foto Luminária"
+                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LUMINARIA, file)}
                             obrigatorio={true}
                             erro={erroFotos?.includes('Luminária')}
                         />
                         <p className="text-center text-sm mt-2 font-medium">
-                            LUMINÁRIA <span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) && (
-                                <span className="text-green-500 ml-2">✓</span>
+                            LUMINÁRIA<span className="text-red-500">*</span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) ? (
+                                <span className="text-green-500 ml-2">✓ Adicionada</span>
+                            ) : (
+                                <span className="text-gray-500 ml-2">(Obrigatória)</span>
                             )}
                         </p>
                     </div>
@@ -874,18 +994,17 @@ function Cadastro() {
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-telecom"
-                            label="Foto Telecom ( Opcional )"
-                            onFotoCapturada={(file) => {
-                                console.log('Arquivo recebido (Telecom):', file);
-                                adicionarFoto(TIPOS_FOTO.TELECOM, file);
-                            }}
+                            label="Foto Telecom (Opcional)"
+                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.TELECOM, file)}
                             obrigatorio={false}
                             erro={erroFotos?.includes('Telecom')}
                         />
                         <p className="text-center text-sm mt-2 font-medium">
-                            TELECOM <span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.TELECOM) && (
-                                <span className="text-green-500 ml-2">✓</span>
+                            TELECOM<span className="text-red-500"></span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.TELECOM) ? (
+                                <span className="text-green-500 ml-2">✓ Adicionada</span>
+                            ) : (
+                                <span className="text-gray-500 ml-2">(Opcional)</span>
                             )}
                         </p>
 
@@ -897,19 +1016,18 @@ function Cadastro() {
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <BotaoCamera
                             id="foto-Lampada"
-                            label="Foto Lâmpada ( Opcional )"
-                            onFotoCapturada={(file) => {
-                                console.log('Arquivo recebido (Lampada):', file);
-                                adicionarFoto(TIPOS_FOTO.LAMPADA, file);
-                            }}
+                            label="Foto Lâmpada (Opcional)"
+                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LAMPADA, file)}
                             obrigatorio={false}
                             erro={erroFotos?.includes('Lampada')}
                         />
 
                         <p className="text-center text-sm mt-2 font-medium">
-                            LAMPADA <span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADAS) && (
-                                <span className="text-green-500 ml-2">✓</span>
+                            LÂMPADA<span className="text-red-500"></span>
+                            {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADA) ? (
+                                <span className="text-green-500 ml-2">✓ Adicionada</span>
+                            ) : (
+                                <span className="text-gray-500 ml-2">(Opcional)</span>
                             )}
                         </p>
 
@@ -918,24 +1036,80 @@ function Cadastro() {
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
 
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <BotaoArvore
                             id="foto-arvore"
-                            label="Foto da Árvore ( Opcional )"
-                            onFotoCapturada={(file) => {
-                                console.log('Arquivo recebido (Árvore):', file);
-                                adicionarFoto(TIPOS_FOTO.ARVORE, file);
+                            label="Foto da Árvore (Opcional)"
+                            onFotoCapturada={async (dados) => {
+                                console.group('[DEBUG] Foto Árvore - Dados Recebidos');
+                                console.log('Tipo do dado:', typeof dados);
+                                console.log('Conteúdo:', dados);
+                                console.groupEnd();
+
+                                try {
+                                    // Validação cross-platform
+                                    const file = dados.file || dados;
+                                    const especie = dados.especie || 'Não identificada';
+                                    const coords = dados.coords || userCoords;
+
+                                    if (!file || !(file instanceof File)) {
+                                        throw new Error(
+                                            `Tipo de arquivo inválido: ${typeof file}. Esperado File, recebido ${file?.constructor?.name}`
+                                        );
+                                    }
+
+                                    console.log('Metadados da foto:', {
+                                        tamanho: `${(file.size / 1024).toFixed(2)} KB`,
+                                        tipo: file.type,
+                                        últimaModificação: new Date(file.lastModified).toLocaleString()
+                                    });
+
+                                    // Adição com fallback para mobile
+                                    const fotoAdicionada = await handleAdicionarFoto(
+                                        TIPOS_FOTO.ARVORE,
+                                        {
+                                            file,
+                                            especie,
+                                            coords,
+                                            dispositivo: /Mobi|Android/i.test(navigator.userAgent)
+                                                ? 'mobile'
+                                                : 'desktop'
+                                        }
+                                    );
+
+                                    if (!fotoAdicionada) {
+                                        throw new Error('Falha no estado interno');
+                                    }
+
+                                    dispatch({
+                                        type: 'UPDATE_FIELD',
+                                        field: 'especieArvore',
+                                        value: especie
+                                    });
+
+                                    console.log('[SUCESSO] Foto processada:', {
+                                        especie,
+                                        coordenadas: coords,
+                                        dispositivo: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop'
+                                    });
+
+                                } catch (error) {
+                                    console.error('[ERRO] Processamento foto árvore:', {
+                                        erro: error.message,
+                                        stack: error.stack,
+                                        userAgent: navigator.userAgent,
+                                        coordsDisponíveis: !!userCoords
+                                    });
+
+                                    setErroFotos(`Erro na foto da árvore: ${error.message}`);
+                                }
                             }}
                             obrigatorio={false}
-                            erro={erroFotos?.includes('Árvore')}
+                            erro={erroFotos?.includes('ARVORE')}
                             userCoords={userCoords}
+                            debugMode={true} // Adicione esta prop ao componente BotaoArvore
                         />
-                        <p className="text-center text-sm mt-2 font-medium">
-                            ÁRVORE <span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.ARVORE) && (
-                                <span className="text-green-500 ml-2">✓</span>
-                            )}
-                        </p>
+                        
                     </div>
 
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />

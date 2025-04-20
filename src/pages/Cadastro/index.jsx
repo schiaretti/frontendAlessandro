@@ -236,9 +236,22 @@ function Cadastro() {
             return [];
         }
     };
+    //===============================================================================================================//
 
     // Inicializa o mapa
     const initMap = () => {
+
+        // Verifica se o mapa já existe e está inicializado corretamente
+        if (mapRef.current && mapRef.current._loaded) {
+            mapRef.current.setView(userCoords, 18);
+            return;
+        }
+
+        // Adiciona verificação do container do mapa
+        const mapContainer = document.getElementById('mapa');
+        if (!mapContainer || mapContainer._leaflet_id) return;
+
+
         if (mapRef.current) {
             mapRef.current.setView(userCoords, 18);
             return;
@@ -246,7 +259,10 @@ function Cadastro() {
 
         mapRef.current = L.map('mapa', {
             zoomControl: true,
-            preferCanvas: true
+            preferCanvas: true,
+            zoomAnimation: false,
+            markerZoomAnimation: false
+
         }).setView(userCoords, 18);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -469,12 +485,22 @@ function Cadastro() {
 
             if (arquivoOuObjeto instanceof File) {
                 arquivo = arquivoOuObjeto;
+                // Se for árvore, exige metadados
+                if (tipo === TIPOS_FOTO.ARVORE) {
+                    throw new Error('Para árvores, forneça espécie e coordenadas');
+                }
             } else if (arquivoOuObjeto?.file instanceof File) {
                 arquivo = arquivoOuObjeto.file;
-                dadosAdicionais = {
-                    especie: arquivoOuObjeto.especie,
-                    coords: arquivoOuObjeto.coords || userCoords
-                };
+                // Só adiciona dados extras se for árvore
+                if (tipo === TIPOS_FOTO.ARVORE) {
+                    if (!arquivoOuObjeto.especie) {
+                        throw new Error('Espécie da árvore é obrigatória');
+                    }
+                    dadosAdicionais = {
+                        especie: arquivoOuObjeto.especie,
+                        coords: arquivoOuObjeto.coords || userCoords
+                    };
+                }
             } else {
                 throw new Error('Formato de arquivo não suportado');
             }

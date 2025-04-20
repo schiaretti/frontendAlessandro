@@ -131,6 +131,7 @@ const BotaoArvore = ({ label, onFotoCapturada, userCoords, obrigatorio, erro }) 
       const dadosEnvio = {
         file,
         especie,
+        idPoste: props.idPoste, 
         coords: props.userCoords,
         tipo: 'ARVORE',
         timestamp: Date.now()
@@ -182,14 +183,14 @@ const BotaoArvore = ({ label, onFotoCapturada, userCoords, obrigatorio, erro }) 
   return (
     <div className={`mb-4 ${erro ? 'border-2 border-red-500 rounded-lg p-2' : ''}`}>
       {/* Mensagem de erro */}
-      {erroCamera && (
+     /* {erroCamera && (
         <div className="mb-2 p-2 bg-red-100 text-red-700 rounded-md text-sm">
           {erroCamera}
         </div>
       )}
 
       {/* Botão inicial */}
-      {!modoCamera && !fotoCapturada && (
+     /* {!modoCamera && !fotoCapturada && (
         <button
         onClick={iniciarCamera}
         className={`flex items-center justify-center gap-2 w-full ${
@@ -202,7 +203,7 @@ const BotaoArvore = ({ label, onFotoCapturada, userCoords, obrigatorio, erro }) 
       )}
 
       {/* Visualização da câmera */}
-      {modoCamera && (
+     /* {modoCamera && (
         <div className="relative border border-gray-300 rounded-lg overflow-hidden bg-black">
           {carregando ? (
             <div className="flex items-center justify-center h-64 text-white">
@@ -238,7 +239,7 @@ const BotaoArvore = ({ label, onFotoCapturada, userCoords, obrigatorio, erro }) 
       )}
 
       {/* Pré-visualização e confirmação */}
-      {fotoCapturada && (
+     /* {fotoCapturada && (
         <div className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
           <div className="relative">
             <img
@@ -306,3 +307,4 @@ const BotaoArvore = ({ label, onFotoCapturada, userCoords, obrigatorio, erro }) 
 };
 
 export default BotaoArvore;
+

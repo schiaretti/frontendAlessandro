@@ -172,20 +172,15 @@ function Cadastro() {
     // Gerencia o ciclo de vida do mapa
     useEffect(() => {
         if (mostrarMapa && userCoords) {
-            if (!mapRef.current) {
-                initMap();
-            } else {
-                mapRef.current.setView(userCoords, 18);
-                updateUserMarker(userCoords);
-            }
+            initMap();
         }
 
         return () => {
-            if (mapRef.current) {
+            if (mapRef.current && !mostrarMapa) {
                 mapRef.current.remove();
                 mapRef.current = null;
+                markersGroupRef.current = null;
             }
-            markersGroupRef.current = null;
         };
     }, [mostrarMapa, userCoords]);
 
@@ -202,23 +197,23 @@ function Cadastro() {
 
 
     // Busca postes cadastrados - Versão otimizada
-   const fetchPostesCadastrados = async () => {
+    const fetchPostesCadastrados = async () => {
         try {
             const response = await axios.get('https://backendalesandro-production.up.railway.app/api/listar-postes', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-    
+
             // Processamento seguro dos postes
             const postesValidos = response.data.data
                 .filter(poste => {
                     // Verifica se tem coordenadas válidas
-                    const coords = poste.coords || 
-                        (poste.latitude && poste.longitude ? 
-                            [poste.latitude, poste.longitude] : 
+                    const coords = poste.coords ||
+                        (poste.latitude && poste.longitude ?
+                            [poste.latitude, poste.longitude] :
                             null);
-                    
-                    return coords && 
-                        !isNaN(Number(coords[0])) && 
+
+                    return coords &&
+                        !isNaN(Number(coords[0])) &&
                         !isNaN(Number(coords[1]));
                 })
                 .map(poste => {
@@ -229,7 +224,7 @@ function Cadastro() {
                         numeroIdentificacao: poste.numeroIdentificacao || `Poste-${poste.id.slice(0, 8)}`
                     };
                 });
-    
+
             setPostesCadastrados(postesValidos);
             return postesValidos;
         } catch (error) {
@@ -240,45 +235,36 @@ function Cadastro() {
             return [];
         }
     };
-    
+
     // Inicialização otimizada do mapa
     const initMap = () => {
         const mapContainer = document.getElementById('mapa');
-        if (!mapContainer) return;
-    
-        // Reutiliza mapa existente
-        if (mapRef.current) {
-            mapRef.current.setView(userCoords, 18);
-            addPostMarkers();
-            return;
-        }
-    
-        // Cria novo mapa
+        if (!mapContainer || mapRef.current) return;
+
         mapRef.current = L.map('mapa', {
             zoomControl: true,
             preferCanvas: true
         }).setView(userCoords, 18);
-    
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             maxZoom: 19
         }).addTo(mapRef.current);
-    
-        // Cria grupo de marcadores
+
         markersGroupRef.current = L.layerGroup().addTo(mapRef.current);
         updateUserMarker(userCoords);
         addPostMarkers();
     };
-    
+
     // Marcador do usuário - Versão simplificada
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
-    
+
         // Remove marcador existente
         if (mapRef.current.userMarker) {
             mapRef.current.removeLayer(mapRef.current.userMarker);
         }
-    
+
         // Adiciona novo marcador
         mapRef.current.userMarker = L.circleMarker(coords, {
             color: '#2563eb',
@@ -286,23 +272,23 @@ function Cadastro() {
             fillOpacity: 1,
             radius: 8
         }).addTo(mapRef.current)
-        .bindPopup('Sua localização atual');
+            .bindPopup('Sua localização atual');
     };
-    
+
     // Adição de marcadores de postes - Versão robusta
     const addPostMarkers = () => {
         if (!mapRef.current || !markersGroupRef.current || !postesCadastrados.length) {
             return;
         }
-    
+
         try {
             markersGroupRef.current.clearLayers();
             const bounds = new L.LatLngBounds();
-    
+
             postesCadastrados.forEach((poste) => {
                 try {
                     const [lat, lng] = poste.coords;
-                    
+
                     // Cria marcador com ícone personalizado
                     const marker = L.marker([lat, lng], {
                         icon: L.divIcon({
@@ -315,15 +301,15 @@ function Cadastro() {
                             
                         </div>
                     `);
-    
+
                     markersGroupRef.current.addLayer(marker);
                     bounds.extend([lat, lng]);
-                    
+
                 } catch (error) {
                     console.error('Erro ao criar marcador:', error);
                 }
             });
-    
+
             // Ajusta a visualização do mapa
             if (bounds.isValid() && !bounds.getNorthEast().equals(bounds.getSouthWest())) {
                 mapRef.current.flyToBounds(bounds, {
@@ -333,26 +319,39 @@ function Cadastro() {
             } else if (userCoords) {
                 mapRef.current.setView(userCoords, 15);
             }
-    
+
         } catch (error) {
             console.error('Erro crítico ao adicionar marcadores:', error);
         }
     };
 
-    
-
 
     const reutilizarDadosPosteAnterior = () => {
         if (posteAnterior) {
-            const { coords, fotos: _, ...dadosParaReutilizar } = posteAnterior;
+            // Cria cópia segura do posteAnterior
+            const dadosParaReutilizar = {
+                ...posteAnterior,
+                fotos: [], // Reseta as fotos
+                coords: undefined // Remove coordenadas
+            };
+
             const novoNumero = gerarNumeroAutomatico();
 
-            dispatch({ type: 'UPDATE_FIELD', field: 'numeroIdentificacao', value: novoNumero });
-
-            Object.entries(dadosParaReutilizar).forEach(([key, value]) => {
-                if (key in initialState) {
-                    dispatch({ type: 'UPDATE_FIELD', field: key, value });
+            // Atualiza cada campo individualmente
+            Object.keys(dadosParaReutilizar).forEach(key => {
+                if (key in initialState && dadosParaReutilizar[key] !== undefined) {
+                    dispatch({
+                        type: 'UPDATE_FIELD',
+                        field: key,
+                        value: dadosParaReutilizar[key]
+                    });
                 }
+            });
+
+            dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'numeroIdentificacao',
+                value: novoNumero
             });
 
             setReutilizarDados(true);
@@ -484,7 +483,7 @@ function Cadastro() {
                     dadosAdicionais = {
                         especie: arquivoOuObjeto.especie,
                         coords: coords, // Armazena como array [lat, lng]
-                        idUnico: `arv-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+                       
                     };
                 }
             } else {
@@ -982,13 +981,196 @@ function Cadastro() {
         }
     };*/
 
-    const handleSalvarCadastro = async () => {
-        if (!userCoords || userCoords.length < 2) {
-            alert("Por favor, espere o GPS carregar as coordenadas!");
-            return;
-        }
+    /* const handleSalvarCadastro = async () => {
+         if (!userCoords || userCoords.length < 2) {
+             alert("Por favor, espere o GPS carregar as coordenadas!");
+             return;
+         }
+ 
+         // Verifica campos obrigatórios
+         const camposObrigatorios = [
+             { campo: 'cidade', nome: 'Cidade' },
+             { campo: 'endereco', nome: 'Endereço' },
+             { campo: 'numero', nome: 'Número' },
+             { campo: 'cep', nome: 'CEP' },
+             { campo: 'transformador', nome: 'Transformador' },
+             { campo: 'medicao', nome: 'Medição' },
+             { campo: 'poste', nome: 'Tipo de Poste' },
+             { campo: 'alturaposte', nome: 'Altura do Poste' },
+             { campo: 'tipoLampada', nome: 'Tipo de Lâmpada' },
+             { campo: 'potenciaLampada', nome: 'Potência da Lâmpada' }
+         ];
+ 
+         const camposFaltantes = camposObrigatorios
+             .filter(({ campo }) => !state[campo]?.toString().trim())
+             .map(({ nome }) => nome);
+ 
+         if (camposFaltantes.length > 0) {
+             alert(`Preencha os campos obrigatórios:\n${camposFaltantes.join(', ')}`);
+             return;
+         }
+ 
+         try {
+             // Calcula distância entre postes (se tiver poste anterior)
+             let distanciaCalculada = null;
+             if (posteAnterior?.coords) {
+                 distanciaCalculada = Math.round(calcularDistancia(
+                     posteAnterior.coords[0],
+                     posteAnterior.coords[1],
+                     userCoords[0],
+                     userCoords[1]
+                 ));
+             }
+ 
+             const formData = new FormData();
+ 
+             // Converter campos numéricos e booleanos
+             const dadosParaEnviar = {
+                 ...state,
+                 coords: JSON.stringify([userCoords[0], userCoords[1]]),
+                 usuarioId,
+                 isLastPost: state.isLastPost === 'true',
+                 canteiroCentral: state.canteiroCentral === 'Sim', // Converter para boolean
+                 alturaposte: state.alturaposte ? parseFloat(state.alturaposte) : null,
+                 tamanhoBraco: state.tamanhoBraco ? parseFloat(state.tamanhoBraco) : null,
+                 quantidadePontos: state.quantidadePontos ? parseInt(state.quantidadePontos) : null,
+                 potenciaLampada: state.potenciaLampada ? parseInt(state.potenciaLampada) : null,
+                 quantidadeFaixas: state.quantidadeFaixas ? parseInt(state.quantidadeFaixas) : null
+             };
+ 
+             // Adicionar distância se existir
+             if (distanciaCalculada !== null) {
+                 dadosParaEnviar.distanciaEntrePostes = distanciaCalculada;
+             }
+ 
+             // Adicionar campos ao FormData
+             Object.entries(dadosParaEnviar).forEach(([key, value]) => {
+                 if (value != null && value !== '') {
+                     formData.append(key, value.toString());
+                 }
+             });
+ 
+             // ===== TRATAMENTO DAS FOTOS =====
+             // Preparar arrays para metadados
+             const tipos = [];
+             const especies = [];
+             const latitudes = [];
+             const longitudes = [];
+ 
+             fotos.forEach((foto, index) => {
+                 //formData.append('fotos', foto.arquivo);
+                 //tipos.push(foto.tipo);
+                 formData.append(`fotos[${index}]`, foto.arquivo);
+                 formData.append(`tipos[${index}]`, foto.tipo);
+ 
+                 if (foto.tipo === 'ARVORE') {
+                     formData.append(`especies[${index}]`, foto.especie);
+                     const coords = foto.coords || userCoords;
+                     formData.append(`latitudes[${index}]`, coords[0]);
+                     formData.append(`longitudes[${index}]`, coords[1]);
+                 } else {
+                     // Para fotos que não são árvores, não envie esses campos
+                     // Ou envie valores vazios se o backend exigir
+                     formData.append(`especies[${index}]`, '');
+                     formData.append(`latitudes[${index}]`, '');
+                     formData.append(`longitudes[${index}]`, '');
+                 }
+             });
+ 
+                // DEBUG: Verifique os dados antes de enviar
+         for (let pair of formData.entries()) {
+             console.log(pair[0], pair[1]);
+         }
+                     //if (!foto.especie) {
+                       //  throw new Error(`Árvore ${index + 1} sem espécie definida`);
+                     //}
+                     //especies.push(foto.especie);
+ 
+                     /*if (foto.coords) {
+                         latitudes.push(foto.coords[0]);
+                         longitudes.push(foto.coords[1]);
+                     }
+                 }
+             });*/
 
-        // Verifica campos obrigatórios
+    // Garante coordenadas válidas
+    /*const coords = foto.coords || userCoords;
+    if (!coords || coords.length !== 2) {
+        throw new Error('Coordenadas inválidas para árvore');
+    }
+    latitudes.push(coords[0]);
+    longitudes.push(coords[1]);
+} else {
+    // Para outras fotos, envia valores vazios
+    especies.push('');
+    latitudes.push('');
+    longitudes.push('');
+}
+});*/
+
+    // Adicionar arrays ao FormData
+    /* tipos.forEach(tipo => formData.append('tipos', tipo));
+     especies.forEach(esp => formData.append('especies', esp));
+     latitudes.forEach(lat => formData.append('latitudes', lat));
+     longitudes.forEach(lng => formData.append('longitudes', lng));
+
+     console.log("Dados formatados:", {
+         ...dadosParaEnviar,
+         tipos, especies, latitudes, longitudes
+     });
+
+     // ========== 4. ENVIO PARA O BACKEND ==========
+     console.log("Enviando dados...");
+     const response = await axios.post(
+         'https://backendalesandro-production.up.railway.app/api/postes',
+         formData,
+         {
+             headers: {
+                 'Content-Type': 'multipart/form-data',
+                 'Authorization': `Bearer ${token}`
+             },
+             timeout: 30000 // 30 segundos
+         }
+     );
+
+     // ========== 5. RESPOSTA DO BACKEND ==========
+     if (response.data.success) {
+         alert("Poste cadastrado com sucesso!");
+
+         // Atualiza o posteAnterior com os dados do poste recém-criado
+         setPosteAnterior({
+             ...state,
+             coords: userCoords,
+             id: response.data.id || Date.now().toString() // usa o ID retornado ou um timestamp
+         });
+
+         setFotos([]);
+         // Limpar formulário ou redirecionar se necessário
+     } else {
+         throw new Error(response.data.message || "Erro no servidor");
+     }
+
+ } catch (error) {
+     console.error("Erro no cadastro:", error);
+
+     let mensagem = "Erro ao enviar dados";
+     if (error.response) {
+         mensagem = error.response.data?.message ||
+             `Erro ${error.response.status}: ${error.response.statusText}`;
+     } else if (error.message) {
+         mensagem = error.message;
+     }
+
+     alert(mensagem);
+
+     if (error.response?.status === 401) {
+         handleLogout();
+     }
+ }
+};*/
+
+    const handleSalvarCadastro = async () => {
+        // Primeiro, definimos todos os campos obrigatórios do formulário
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
             { campo: 'endereco', nome: 'Endereço' },
@@ -1002,129 +1184,157 @@ function Cadastro() {
             { campo: 'potenciaLampada', nome: 'Potência da Lâmpada' }
         ];
 
-        const camposFaltantes = camposObrigatorios
-            .filter(({ campo }) => !state[campo]?.toString().trim())
-            .map(({ nome }) => nome);
+        // Verificamos quais campos obrigatórios não foram preenchidos
+        const camposNaoPreenchidos = camposObrigatorios
+            .filter((item) => !state[item.campo]?.toString().trim())
+            .map((item) => item.nome);
 
-        if (camposFaltantes.length > 0) {
-            alert(`Preencha os campos obrigatórios:\n${camposFaltantes.join(', ')}`);
+        // Se houver campos não preenchidos, mostramos um alerta e interrompemos a função
+        if (camposNaoPreenchidos.length > 0) {
+            alert(`Por favor, preencha os seguintes campos obrigatórios:\n${camposNaoPreenchidos.join(', ')}`);
             return;
         }
 
         try {
-            // Calcula distância entre postes (se tiver poste anterior)
-            let distanciaCalculada = null;
+            // Calculamos a distância entre postes se existir um poste anterior
+            let distanciaEntrePostesCalculada = null;
             if (posteAnterior?.coords) {
-                distanciaCalculada = Math.round(calcularDistancia(
-                    posteAnterior.coords[0],
-                    posteAnterior.coords[1],
-                    userCoords[0],
-                    userCoords[1]
-                ));
+                distanciaEntrePostesCalculada = Math.round(
+                    calcularDistancia(
+                        posteAnterior.coords[0],
+                        posteAnterior.coords[1],
+                        userCoords[0],
+                        userCoords[1]
+                    )
+                );
             }
 
-            const formData = new FormData();
+            // Criamos um novo objeto FormData para enviar os dados
+            const formularioDados = new FormData();
 
-            // Converter campos numéricos e booleanos
+            // Preparamos todos os dados que serão enviados
             const dadosParaEnviar = {
-                ...state,
-                coords: JSON.stringify([userCoords[0], userCoords[1]]),
-                usuarioId,
-                isLastPost: state.isLastPost === 'true',
-                canteiroCentral: state.canteiroCentral === 'Sim', // Converter para boolean
+                cidade: state.cidade,
+                endereco: state.endereco,
+                numero: state.numero,
+                cep: state.cep,
+                localizacao: state.localizacao || null,
+                emFrente: state.emFrente || null,
+                transformador: state.transformador,
+                medicao: state.medicao,
+                telecom: state.telecom,
+                concentrador: state.concentrador,
+                poste: state.poste,
                 alturaposte: state.alturaposte ? parseFloat(state.alturaposte) : null,
+                estruturaposte: state.estruturaposte,
+                tipoBraco: state.tipoBraco,
                 tamanhoBraco: state.tamanhoBraco ? parseFloat(state.tamanhoBraco) : null,
                 quantidadePontos: state.quantidadePontos ? parseInt(state.quantidadePontos) : null,
+                tipoLampada: state.tipoLampada,
                 potenciaLampada: state.potenciaLampada ? parseInt(state.potenciaLampada) : null,
-                quantidadeFaixas: state.quantidadeFaixas ? parseInt(state.quantidadeFaixas) : null
+                tipoReator: state.tipoReator,
+                tipoComando: state.tipoComando,
+                tipoRede: state.tipoRede,
+                tipoCabo: state.tipoCabo,
+                numeroFases: state.numeroFases,
+                tipoVia: state.tipoVia,
+                hierarquiaVia: state.hierarquiaVia,
+                tipoPavimento: state.tipoPavimento,
+                quantidadeFaixas: state.quantidadeFaixas ? parseInt(state.quantidadeFaixas) : null,
+                tipoPasseio: state.tipoPasseio,
+                canteiroCentral: state.canteiroCentral === 'Sim',
+                finalidadeInstalacao: state.finalidadeInstalacao,
+                numeroIdentificacao: state.numeroIdentificacao,
+                coords: JSON.stringify([userCoords[0], userCoords[1]]),
+                latitude: userCoords[0],
+                longitude: userCoords[1],
+                usuarioId: usuarioId,
+                isLastPost: state.isLastPost === 'true',
+                distanciaEntrePostes: distanciaEntrePostesCalculada
             };
 
-            // Adicionar distância se existir
-            if (distanciaCalculada !== null) {
-                dadosParaEnviar.distanciaEntrePostes = distanciaCalculada;
+            // Adicionamos cada campo ao FormData
+            Object.entries(dadosParaEnviar).forEach(([chave, valor]) => {
+                if (valor !== null && valor !== undefined) {
+                    formularioDados.append(chave, valor.toString());
+                }
+            });
+
+            // Verificamos se as fotos obrigatórias foram adicionadas
+            const tiposDeFotosEnviadas = fotos.map((foto) => foto.tipo);
+            const fotosObrigatorias = ['PANORAMICA', 'LUMINARIA'];
+            const fotosFaltando = fotosObrigatorias.filter(
+                (tipo) => !tiposDeFotosEnviadas.includes(tipo)
+            );
+
+            if (fotosFaltando.length > 0) {
+                throw new Error(`Fotos obrigatórias não adicionadas: ${fotosFaltando.join(', ')}`);
             }
 
-            // Adicionar campos ao FormData
-            Object.entries(dadosParaEnviar).forEach(([key, value]) => {
-                if (value != null && value !== '') {
-                    formData.append(key, value.toString());
-                }
-            });
-
-            // ===== TRATAMENTO DAS FOTOS =====
-            // Preparar arrays para metadados
-            const tipos = [];
-            const especies = [];
-            const latitudes = [];
-            const longitudes = [];
-
-            fotos.forEach((foto, index) => {
-                formData.append('fotos', foto.arquivo);
-                tipos.push(foto.tipo);
+            // Adicionamos cada foto ao FormData
+            fotos.forEach((foto, indice) => {
+                formularioDados.append(`fotos`, foto.arquivo);
+                formularioDados.append(`tipos`, foto.tipo);
 
                 if (foto.tipo === 'ARVORE') {
-                    if (!foto.especie) {
-                        throw new Error(`Árvore ${index + 1} sem espécie definida`);
-                    }
-                    especies.push(foto.especie);
-
-                    if (foto.coords) {
-                        latitudes.push(foto.coords[0]);
-                        longitudes.push(foto.coords[1]);
-                    }
+                    formularioDados.append(`especies`, foto.especie);
+                    const coordenadas = foto.coords || userCoords;
+                    formularioDados.append(`latitudes`, coordenadas[0].toString());
+                    formularioDados.append(`longitudes`, coordenadas[1].toString());
                 }
             });
 
-            // Adicionar arrays ao FormData
-            tipos.forEach(tipo => formData.append('tipos', tipo));
-            especies.forEach(esp => formData.append('especies', esp));
-            latitudes.forEach(lat => formData.append('latitudes', lat));
-            longitudes.forEach(lng => formData.append('longitudes', lng));
-
-            console.log("Dados formatados:", {
-                ...dadosParaEnviar,
-                tipos, especies, latitudes, longitudes
+            // Mostramos os dados no console para debug
+            console.log('Dados que serão enviados:', {
+                dadosPrincipais: dadosParaEnviar,
+                fotos: {
+                    total: fotos.length,
+                    panoramica: fotos.some((f) => f.tipo === 'PANORAMICA'),
+                    luminaria: fotos.some((f) => f.tipo === 'LUMINARIA'),
+                    arvores: fotos.filter((f) => f.tipo === 'ARVORE').length
+                }
             });
 
-            // ========== 4. ENVIO PARA O BACKEND ==========
-            console.log("Enviando dados...");
-            const response = await axios.post(
+            // Enviamos os dados para o servidor
+            const resposta = await axios.post(
                 'https://backendalesandro-production.up.railway.app/api/postes',
-                formData,
+                formularioDados,
                 {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         'Authorization': `Bearer ${token}`
-                    },
-                    timeout: 30000 // 30 segundos
+                    }
                 }
             );
 
-            // ========== 5. RESPOSTA DO BACKEND ==========
-            if (response.data.success) {
-                alert("Poste cadastrado com sucesso!");
+            // Se a resposta for positiva
+            if (resposta.data.success) {
+                alert('Poste cadastrado com sucesso!');
+
+                // Atualizamos o poste anterior com os dados atuais
+                setPosteAnterior({
+                    ...state,
+                    coords: userCoords,
+                    id: resposta.data.id || Date.now().toString()
+                });
+
+                // Limpamos as fotos
                 setFotos([]);
-                // Limpar formulário ou redirecionar se necessário
             } else {
-                throw new Error(response.data.message || "Erro no servidor");
+                throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
             }
 
-        } catch (error) {
-            console.error("Erro no cadastro:", error);
+        } catch (erro) {
+            console.error('Erro ao salvar cadastro:', erro);
 
-            let mensagem = "Erro ao enviar dados";
-            if (error.response) {
-                mensagem = error.response.data?.message ||
-                    `Erro ${error.response.status}: ${error.response.statusText}`;
-            } else if (error.message) {
-                mensagem = error.message;
+            let mensagemErro = 'Erro ao cadastrar poste';
+            if (erro.response?.data?.message) {
+                mensagemErro = erro.response.data.message;
+            } else if (erro.message) {
+                mensagemErro = erro.message;
             }
 
-            alert(mensagem);
-
-            if (error.response?.status === 401) {
-                handleLogout();
-            }
+            alert(mensagemErro);
         }
     };
 
@@ -1201,15 +1411,20 @@ function Cadastro() {
                     {/* Mapa */}
                     {mostrarMapa && (
                         <div className="mb-6">
-                            <div id="mapa" className="h-96 w-full rounded-lg border border-gray-300"></div>
+                            <div
+                                id="mapa"
+                                className="h-[80vh] w-full rounded-lg border border-gray-300"
+                                style={{ minHeight: '400px', maxHeight: '600px' }}
+                            ></div>
                             <button
-                                onClick={fecharMapa}
+                                onClick={() => setMostrarMapa(false)}
                                 className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                             >
                                 Fechar Mapa
                             </button>
                         </div>
                     )}
+
 
                     {/* Campos de Localização */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -1450,12 +1665,12 @@ function Cadastro() {
                                         value={especieArvore}
                                         options={[
                                             { value: "Sibipuruna", label: "Sibipuruna" },
-                                            { value: "Outra", label: "Outra espécie" },
                                             { value: "Oiti", label: "Oiti" },
                                             { value: "Mangueira", label: "Mangueira" },
                                             { value: "Sete Copas", label: "Sete Copas" },
                                             { value: "Coqueiro", label: "Coqueiro" },
                                             { value: "Desconhecida", label: "Desconhecida" },
+                                            { value: "Outra", label: "Outra espécie" },
                                         ]}
                                         onChange={setEspecieArvore}
                                         required
@@ -1474,12 +1689,21 @@ function Cadastro() {
 
                                     <button
                                         onClick={() => {
-                                            const especie = especieArvore === "Outra" ? especieCustom : especieArvore;
+                                            const especie = especieArvore === "Outra"
+                                                ? especieCustom
+                                                : especieArvore;
 
                                             if (!especie?.trim()) {
                                                 alert("Selecione ou digite a espécie!");
                                                 return;
                                             }
+
+                                            // DEBUG: Verifique os dados antes de enviar
+                                            console.log('Dados da árvore:', {
+                                                file: fotoArvore,
+                                                especie,
+                                                coords: userCoords
+                                            });
 
                                             handleAdicionarFoto(TIPOS_FOTO.ARVORE, {
                                                 file: fotoArvore,

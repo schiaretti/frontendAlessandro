@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+    .leaflet-popup {
+      @apply rounded-lg shadow-md border border-gray-200 bg-white;
+    }
+    
+    .leaflet-popup-content-wrapper {
+      @apply p-0 bg-transparent;
+    }
+    
+    .leaflet-popup-content {
+      @apply m-0 w-full;
+    }
+    
+    .leaflet-div-icon {
+      @apply bg-transparent border-none w-4 h-4;
+      width: 20px !important;   /* Tamanho da área clicável */
+      height: 20px !important;  /* Mantém maior que o ícone visível */
+      margin-left: -10px !important;
+      margin-top: -10px !important;
+    }
+    
+    .leaflet-marker-dragging {
+      @apply cursor-grabbing;
+    }
+    
+    .btn-confirm {
+      @apply px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded 
+             transition-colors duration-200 text-sm font-medium;
+    }
+    
+    .btn-cancel {
+      @apply px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded 
+             transition-colors duration-200 text-sm font-medium;
+    }
+    
+    /* Garante que o popup fique acima de outros elementos */
+    .leaflet-container .leaflet-popup {
+      @apply z-[1000];
+    }
+
+    .leaflet-container {
+        touch-action: none; /* Permite eventos de toque longo */
+    }
+}

@@ -76,6 +76,8 @@ const gerarNumeroAutomatico = () => {
 };
 
 function Cadastro() {
+
+
     // ==============================================
     // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
     // ==============================================
@@ -124,6 +126,22 @@ function Cadastro() {
     const [especieCustom, setEspecieCustom] = useState("");
     const [erroFotoArvore, setErroFotoArvore] = useState(null);
     const [erroEspecieArvore, setErroEspecieArvore] = useState(null);
+    const [editingMarker, setEditingMarker] = useState(null);
+    const [showEditButtons, setShowEditButtons] = useState(false);
+    const [mapClickHandler, setMapClickHandler] = useState(null);
+    const [mapDraggingEnabled, setMapDraggingEnabled] = useState(true);
+    const [editMode, setEditMode] = useState(false);
+    const [selectedMarker, setSelectedMarker] = useState(null);
+    const [enderecoEditado, setEnderecoEditado] = useState(false);
+
+
+
+    // Função auxiliar para debug
+    const debugLog = (...args) => {
+        if (debugMode) {
+            console.log('[DEBUG]', ...args);
+        }
+    };
 
     const handleFieldChange = (field, value) => {
         dispatch({ type: 'UPDATE_FIELD', field, value });
@@ -151,9 +169,10 @@ function Cadastro() {
         return a.length === b.length && a.every((val, index) => val === b[index]);
     }
 
+
     // Preenche campos do endereço automaticamente
     useEffect(() => {
-        if (endereco) {
+        if (endereco && !enderecoEditado) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
             dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
             dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
@@ -167,29 +186,63 @@ function Cadastro() {
                 dispatch({ type: 'UPDATE_FIELD', field: 'localizacao', value: endereco.bairro });
             }
         }
-    }, [endereco, isNumeroManual]);
+    }, [endereco, isNumeroManual, enderecoEditado]);
 
-    // Gerencia o ciclo de vida do mapa
     useEffect(() => {
         if (mostrarMapa && userCoords) {
             initMap();
         }
 
         return () => {
-            if (mapRef.current && !mostrarMapa) {
+            if (mapRef.current) {
+                // Remove todos os event listeners
+                if (mapClickHandler) {
+                    mapRef.current.off('click', mapClickHandler);
+                }
                 mapRef.current.remove();
                 mapRef.current = null;
-                markersGroupRef.current = null;
             }
         };
     }, [mostrarMapa, userCoords]);
 
     // Atualiza marcadores quando postes mudam
+
     useEffect(() => {
-        if (mapRef.current && markersGroupRef.current && postesCadastrados.length > 0) {
-            addPostMarkers();
+        if (mapRef.current && markersGroupRef.current) {
+            // Adiciona um debounce para evitar recriações rápidas
+            const timer = setTimeout(() => {
+                addPostMarkers();
+            }, 300);
+
+            return () => clearTimeout(timer);
         }
-    }, [postesCadastrados]);
+    }, [postesCadastrados]); // Remova outras dependências desnecessárias
+
+    useEffect(() => {
+        const handleClick = (e) => {
+            console.log('Clique no mapa:', e.latlng);
+            if (editingMarker) { // ← AGORA editingMarker JÁ FOI DECLARADO
+                console.log('Marcador em edição:', editingMarker.options.posteId);
+            }
+        };
+
+        if (mapRef.current) {
+            mapRef.current.on('click', handleClick);
+        }
+
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.off('click', handleClick);
+            }
+        };
+    }, [editingMarker]);
+
+    const handleEnderecoChange = (e) => {
+        setEnderecoEditado(true); // Marca que o usuário editou manualmente
+        dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
+        dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
+    };
+
 
     // ==============================================
     // SEÇÃO 4: FUNÇÕES PRINCIPAIS
@@ -236,6 +289,23 @@ function Cadastro() {
         }
     };
 
+    // Adicione no início do seu componente, após as declarações de estado
+    const [debugMode, setDebugMode] = useState(false);
+
+    // Adicione isto temporariamente para debug
+    useEffect(() => {
+        if (debugMode) {
+            console.log("--- DEBUG ---");
+            console.log("UserCoords:", userCoords);
+            console.log("Postes cadastrados:", postesCadastrados);
+            if (markersGroupRef.current) {
+                console.log("Marcadores no mapa:", markersGroupRef.current.getLayers());
+            }
+        }
+    }, [debugMode, userCoords, postesCadastrados]);
+
+
+
     // Inicialização otimizada do mapa
     const initMap = () => {
         const mapContainer = document.getElementById('mapa');
@@ -256,7 +326,8 @@ function Cadastro() {
         addPostMarkers();
     };
 
-    // Marcador do usuário - Versão simplificada
+
+    // Modifique a função updateUserMarker para incluir a lógica de mover o marcador selecionado
     const updateUserMarker = (coords) => {
         if (!mapRef.current) return;
 
@@ -273,55 +344,284 @@ function Cadastro() {
             radius: 8
         }).addTo(mapRef.current)
             .bindPopup('Sua localização atual');
+
+        // Se estiver no modo de edição e tiver um marcador selecionado, move para a nova posição
+        if (editMode && selectedMarker) {
+            selectedMarker.setLatLng(coords);
+            selectedMarker._posteData.tempPosition = coords;
+
+            // Atualiza o popup
+            selectedMarker.setPopupContent(`
+            <div class="p-2">
+                <strong>${selectedMarker.options.posteId}</strong>
+                <div class="text-yellow-600 text-xs font-bold">
+                    Nova posição:<br>
+                    Lat: ${coords.lat.toFixed(6)}<br>
+                    Lng: ${coords.lng.toFixed(6)}
+                </div>
+            </div>
+        `);
+        }
     };
 
-    // Adição de marcadores de postes - Versão robusta
-    const addPostMarkers = () => {
-        if (!mapRef.current || !markersGroupRef.current || !postesCadastrados.length) {
-            return;
+    // Função para entrar no modo de edição
+    const startEditMode = () => {
+        setEditMode(true);
+        setShowEditButtons(false); // Esconde os botões até que um marcador seja selecionado
+
+        // Muda o cursor para indicar modo de seleção
+        if (mapRef.current) {
+            mapRef.current.getContainer().style.cursor = 'pointer';
+        }
+    };
+
+    // Função para selecionar um marcador para edição
+    const selectMarkerForEdit = (marker) => {
+        if (!editMode) return;
+
+        // Desseleciona o marcador anterior se existir
+        if (selectedMarker) {
+            selectedMarker.setIcon(L.divIcon({
+                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
+                className: ''
+            }));
         }
 
+        // Seleciona o novo marcador
+        setSelectedMarker(marker);
+
+        // Muda a cor do marcador para indicar seleção
+        marker.setIcon(L.divIcon({
+            html: '<div class="bg-yellow-500 rounded-full w-8 h-8 border-2 border-white animate-pulse"></div>',
+            className: ''
+        }));
+
+        // Move o marcador para a posição atual do usuário
+        if (mapRef.current?.userMarker) {
+            const userPos = mapRef.current.userMarker.getLatLng();
+            marker.setLatLng(userPos);
+            marker._posteData.tempPosition = userPos;
+
+            // Atualiza o popup
+            marker.setPopupContent(`
+            <div class="p-2">
+                <strong>${marker.options.posteId}</strong>
+                <div class="text-yellow-600 text-xs font-bold">
+                    Nova posição:<br>
+                    Lat: ${userPos.lat.toFixed(6)}<br>
+                    Lng: ${userPos.lng.toFixed(6)}
+                </div>
+            </div>
+        `);
+        }
+
+        // Mostra os botões de ação
+        setShowEditButtons(true);
+        marker.openPopup();
+    };
+
+    // Modifique a função addPostMarkers para usar o novo sistema de seleção
+    const addPostMarkers = () => {
         try {
-            markersGroupRef.current.clearLayers();
-            const bounds = new L.LatLngBounds();
+            console.log('[MARKERS] Iniciando criação de marcadores');
 
-            postesCadastrados.forEach((poste) => {
-                try {
-                    const [lat, lng] = poste.coords;
-
-                    // Cria marcador com ícone personalizado
-                    const marker = L.marker([lat, lng], {
-                        icon: L.divIcon({
-                            html: '<div class="bg-green-600 rounded-full w-3 h-3"></div>',
-                            className: 'bg-transparent border-none'
-                        })
-                    }).bindPopup(`
-                        <div class="text-sm font-medium">
-                            <div>${poste.numeroIdentificacao}</div>
-                            
-                        </div>
-                    `);
-
-                    markersGroupRef.current.addLayer(marker);
-                    bounds.extend([lat, lng]);
-
-                } catch (error) {
-                    console.error('Erro ao criar marcador:', error);
-                }
-            });
-
-            // Ajusta a visualização do mapa
-            if (bounds.isValid() && !bounds.getNorthEast().equals(bounds.getSouthWest())) {
-                mapRef.current.flyToBounds(bounds, {
-                    padding: [50, 50],
-                    maxZoom: 16
-                });
-            } else if (userCoords) {
-                mapRef.current.setView(userCoords, 15);
+            if (!mapRef.current || !markersGroupRef.current) {
+                throw new Error('Referências do mapa não disponíveis');
             }
 
+            // Remove o handler de clique anterior se existir
+            if (mapClickHandler) {
+                mapRef.current.off('click', mapClickHandler);
+            }
+
+            // Se já temos marcadores e não estamos editando, não recrie
+            if (markersGroupRef.current.getLayers().length > 0 && !editMode) {
+                console.log('[MARKERS] Marcadores já existem, pulando recriação');
+                return;
+            }
+
+            // Cria um novo handler de clique
+            const handleMapClick = (e) => {
+                // Não faz nada no modo de edição, a menos que seja um clique em um marcador
+                // (isso será tratado pelos eventos do marcador)
+            };
+
+            // Registra o novo handler
+            mapRef.current.on('click', handleMapClick);
+            setMapClickHandler(() => handleMapClick);
+
+            // Limpa marcadores existentes
+            markersGroupRef.current.clearLayers();
+
+            // Cria novos marcadores
+            postesCadastrados.forEach((poste) => {
+                const [lat, lng] = poste.coords || [poste.latitude, poste.longitude];
+                if (!lat || !lng) return;
+
+                const marker = L.marker([lat, lng], {
+                    draggable: false,
+                    posteId: poste.id,
+                    icon: L.divIcon({
+                      html: '<div class="bg-green-600 rounded-full w-4 h-4 border border-black absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>',
+                        className: '',
+                        iconSize: [20, 20],  // Área clicável
+                        iconAnchor: [10, 10]  // Ponto de ancoragem centraliza
+                    })
+                });
+
+                // Armazena dados do poste
+                marker._posteData = {
+                    originalPosition: { lat, lng },
+                    tempPosition: { lat, lng },
+                    isEditing: false
+                };
+
+                // Evento de clique para selecionar no modo de edição
+                marker.on('click', () => {
+                    if (editMode) {
+                        selectMarkerForEdit(marker);
+                    } else {
+                        // Comportamento normal (abrir popup)
+                        marker.openPopup();
+                    }
+                });
+
+                // Popup informativo
+                marker.bindPopup(`
+                <div class="p-2">
+                    <strong>${poste.numeroIdentificacao || poste.id}</strong>
+                    <div class="text-xs">
+                        Lat: ${lat.toFixed(6)}<br>
+                        Lng: ${lng.toFixed(6)}
+                    </div>
+                </div>
+            `);
+
+                markersGroupRef.current.addLayer(marker);
+            });
+
         } catch (error) {
-            console.error('Erro crítico ao adicionar marcadores:', error);
+            console.error('Erro ao adicionar marcadores:', error);
+        }
+    };
+
+
+    // Função para atualizar a posição no backend
+    const atualizarPosicaoPoste = async (posteId, lat, lng) => {
+        try {
+            console.log('Enviando atualização para API - Poste:', posteId, 'Coords:', { lat, lng });
+
+            const resposta = await axios.put(
+                `https://backendalesandro-production.up.railway.app/api/postes/${posteId}/localizacao`,
+                { latitude: lat, longitude: lng },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000
+                }
+            );
+
+            if (!resposta.data?.success) {
+                throw new Error(resposta.data?.message || 'Resposta do servidor sem sucesso');
+            }
+
+            console.log('Atualização no backend realizada com sucesso');
+            return resposta.data;
+
+        } catch (erro) {
+            console.error('[API ERRO] Detalhes do erro:', {
+                message: erro.message,
+                status: erro.response?.status,
+                data: erro.response?.data
+            });
+
+            let mensagemErro = 'Erro ao atualizar posição';
+            if (erro.response) {
+                if (erro.response.status === 401) {
+                    mensagemErro = 'Autenticação falhou - faça login novamente';
+                } else if (erro.response.data?.message) {
+                    mensagemErro = erro.response.data.message;
+                }
+            }
+
+            throw new Error(mensagemErro);
+        }
+    };
+
+
+    // Função savePosition
+    const savePosition = async () => {
+        if (!selectedMarker) return;
+
+        try {
+            const newPos = selectedMarker._posteData.tempPosition;
+            console.log('Salvando nova posição:', newPos);
+
+            // Atualiza no backend
+            await atualizarPosicaoPoste(selectedMarker.options.posteId, newPos.lat, newPos.lng);
+
+            // Atualiza o estado global
+            setPostesCadastrados(prev =>
+                prev.map(poste =>
+                    poste.id === selectedMarker.options.posteId
+                        ? {
+                            ...poste,
+                            latitude: newPos.lat,
+                            longitude: newPos.lng,
+                            coords: [newPos.lat, newPos.lng]
+                        }
+                        : poste
+                )
+            );
+
+            // Restaura o ícone normal
+            selectedMarker.setIcon(L.divIcon({
+                html: '<div class="bg-yellow-500 rounded-full w-6 h-6 border border-black animate-pulse absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>',
+                className: '',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            }));
+
+            // Atualiza a posição original
+            selectedMarker._posteData.originalPosition = newPos;
+
+            // Sai do modo de edição
+            exitEditMode();
+
+        } catch (error) {
+            console.error('Erro ao salvar posição:', error);
+            alert(`Erro: ${error.message}`);
+            cancelEdit();
+        }
+    };
+
+    // Função para cancelar edição
+    const cancelEdit = () => {
+        if (selectedMarker) {
+            // Volta para posição original
+            selectedMarker.setLatLng(selectedMarker._posteData.originalPosition);
+
+            // Restaura o ícone normal
+            selectedMarker.setIcon(L.divIcon({
+                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
+                className: ''
+            }));
+        }
+
+        exitEditMode();
+    };
+
+    // Função para sair do modo de edição
+    const exitEditMode = () => {
+        setEditMode(false);
+        setSelectedMarker(null);
+        setShowEditButtons(false);
+
+        // Restaura o cursor padrão
+        if (mapRef.current) {
+            mapRef.current.getContainer().style.cursor = '';
         }
     };
 
@@ -483,7 +783,7 @@ function Cadastro() {
                     dadosAdicionais = {
                         especie: arquivoOuObjeto.especie,
                         coords: coords, // Armazena como array [lat, lng]
-                       
+
                     };
                 }
             } else {
@@ -533,7 +833,7 @@ function Cadastro() {
     };
 
 
-  
+
     const handleSalvarCadastro = async () => {
         // Primeiro, definimos todos os campos obrigatórios do formulário
         const camposObrigatorios = [
@@ -685,12 +985,12 @@ function Cadastro() {
 
                 // Limpamos as fotos
                 setFotos([]);
-                dispatch({ 
-                    type: 'UPDATE_FIELD', 
-                    field: 'localizacao', 
-                    value: "" 
+                dispatch({
+                    type: 'UPDATE_FIELD',
+                    field: 'localizacao',
+                    value: ""
                 });
-            
+
             } else {
                 throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
             }
@@ -779,7 +1079,6 @@ function Cadastro() {
                         )}
                     </div>
 
-                    {/* Mapa */}
                     {mostrarMapa && (
                         <div className="mb-6">
                             <div
@@ -787,11 +1086,64 @@ function Cadastro() {
                                 className="h-[80vh] w-full rounded-lg border border-gray-300"
                                 style={{ minHeight: '400px', maxHeight: '600px' }}
                             ></div>
+
+                            <div className="flex gap-2 mt-2">
+                                {/* Botão principal - muda de função conforme o estado */}
+                                <button
+                                    onClick={() => {
+                                        if (editMode) {
+                                            // Se estiver editando, cancela a edição
+                                            cancelEdit();
+                                        } else {
+                                            // Se não estiver editando, fecha o mapa
+                                            setMostrarMapa(false);
+                                        }
+                                    }}
+                                    className={`px-4 py-2 rounded-md text-white ${editMode
+                                            ? 'bg-orange-600 hover:bg-orange-700'
+                                            : 'bg-red-600 hover:bg-red-700'
+                                        }`}
+                                >
+                                    {editMode ? 'Cancelar Edição' : 'Fechar Mapa'}
+                                </button>
+
+                                {/* Botão secundário - alterna entre editar/salvar */}
+                                <button
+                                    onClick={() => {
+                                        if (editMode) {
+                                            // Se estiver editando, salva as alterações
+                                            savePosition();
+                                        } else {
+                                            // Se não estiver editando, inicia a edição
+                                            startEditMode();
+                                        }
+                                    }}
+                                    className={`px-4 py-2 rounded-md text-white ${editMode
+                                            ? 'bg-green-600 hover:bg-green-700'
+                                            : 'bg-blue-600 hover:bg-blue-700'
+                                        }`}
+                                >
+                                    {editMode ? 'Salvar Alterações' : 'Editar Localizações'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+
+
+                    {showEditButtons && (
+                        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 z-50">
                             <button
-                                onClick={() => setMostrarMapa(false)}
-                                className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                onClick={savePosition}
+                                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
                             >
-                                Fechar Mapa
+                                Salvar
+                            </button>
+                            <button
+                                onClick={cancelEdit}
+                                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                            >
+                                Cancelar
                             </button>
                         </div>
                     )}
@@ -829,17 +1181,29 @@ function Cadastro() {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Endereço</label>
+                        <div className="relative">
                             <input
                                 type="text"
-                                value={state.enderecoInput}
-                                onChange={(e) => {
-                                    handleFieldChange('enderecoInput', e.target.value);
-                                    handleFieldChange('endereco', e.target.value);
-                                }}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={state.enderecoInput || ""}
+                                onChange={handleEnderecoChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                             />
+                            {enderecoEditado && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEnderecoEditado(false);
+                                        // Disparar o preenchimento automático novamente
+                                        if (endereco) {
+                                            dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua });
+                                            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua });
+                                        }
+                                    }}
+                                    className="absolute right-2 top-2 text-xs text-blue-500 hover:text-blue-700"
+                                >
+                                    Restaurar automático
+                                </button>
+                            )}
                         </div>
 
                         <div>

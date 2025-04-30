@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useReducer } from "react";
+import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from "react";
 import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
@@ -75,39 +75,24 @@ const gerarNumeroAutomatico = () => {
     return `${numeroBase}-${digitoVerificador}`;
 };
 
+
 function Cadastro() {
-
-
     // ==============================================
-    // SEÇÃO 1: AUTENTICAÇÃO E VERIFICAÇÃO DE USUÁRIO
-    // ==============================================
-
-    const [token, setToken] = useState(localStorage.getItem('token'));
-    const decoded = token ? JSON.parse(atob(token.split('.')[1])) : null;
-    const usuarioId = decoded?.id;
-
-    // Redireciona se não autenticado
-    if (!usuarioId) {
-        alert('Usuário não autenticado. Redirecionando para login...');
-        window.location.href = '/login';
-        return null;
-    }
-
-    // ==============================================
-    // SEÇÃO 2: ESTADOS E REFERÊNCIAS
+    // SEÇÃO 1: ESTADOS E REFERÊNCIAS (OTIMIZADO)
     // ==============================================
 
     // Referências do mapa
     const mapRef = useRef(null);
     const markersGroupRef = useRef(null);
+    const mapInitialized = useRef(false);
+    const mapClickHandler = useRef(null);
     const numerosUtilizadosRef = useRef([]);
 
-    // Estados de controle
+    // Estados (mantidos iguais)
     const [state, dispatch] = useReducer(formReducer, {
         ...initialState,
         numeroIdentificacao: gerarNumeroAutomatico()
     });
-
     const [isLastPost, setIsLastPost] = useState(false);
     const [isFirstPostRegistered, setIsFirstPostRegistered] = useState(false);
     const [mostrarMapa, setMostrarMapa] = useState(false);
@@ -128,47 +113,42 @@ function Cadastro() {
     const [erroEspecieArvore, setErroEspecieArvore] = useState(null);
     const [editingMarker, setEditingMarker] = useState(null);
     const [showEditButtons, setShowEditButtons] = useState(false);
-    const [mapClickHandler, setMapClickHandler] = useState(null);
+    //const [mapClickHandler, setMapClickHandler] = useState(null);
     const [mapDraggingEnabled, setMapDraggingEnabled] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [selectedMarker, setSelectedMarker] = useState(null);
     const [enderecoEditado, setEnderecoEditado] = useState(false);
 
 
+    // Autenticação (otimizada com useMemo)
+    const [token, setToken] = useState(localStorage.getItem('token'));
+    const decoded = useMemo(() => token ? JSON.parse(atob(token.split('.')[1])) : null, [token]);
+    const usuarioId = decoded?.id;
 
-    // Função auxiliar para debug
-    const debugLog = (...args) => {
-        if (debugMode) {
-            console.log('[DEBUG]', ...args);
-        }
-    };
+    // Redireciona se não autenticado (igual)
+    if (!usuarioId) {
+        alert('Usuário não autenticado. Redirecionando para login...');
+        window.location.href = '/login';
+        return null;
+    }
+
+    // Hook de localização (igual)
+    const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
+
+    // ==============================================
+    // SEÇÃO 2: FUNÇÕES AUXILIARES (OTIMIZADAS)
+    // ==============================================
 
     const handleFieldChange = (field, value) => {
         dispatch({ type: 'UPDATE_FIELD', field, value });
     };
 
-    // Hook de localização
-    const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
 
-    // ==============================================
-    // SEÇÃO 3: EFEITOS COLATERAIS
-    // ==============================================
-
-    // Atualiza coordenadas quando o hook retorna novas
-    useEffect(() => {
-        if (liveCoords && !isLastPost && !arraysEqual(liveCoords, userCoords)) {
-            setUserCoords(liveCoords);
-            setUserAccuracy(accuracy);
-            updateUserMarker(liveCoords);
-        }
-    }, [liveCoords, accuracy, isLastPost, userCoords]);
-
-    // Função auxiliar para comparar arrays
-    function arraysEqual(a, b) {
+    // Função auxiliar para comparar arrays (otimizada)
+    const arraysEqual = useCallback((a, b) => {
         if (!a || !b) return false;
         return a.length === b.length && a.every((val, index) => val === b[index]);
-    }
-
+    }, []);
 
     // Preenche campos do endereço automaticamente
     useEffect(() => {
@@ -187,66 +167,6 @@ function Cadastro() {
             }
         }
     }, [endereco, isNumeroManual, enderecoEditado]);
-
-    useEffect(() => {
-        if (mostrarMapa && userCoords) {
-            initMap();
-        }
-
-        return () => {
-            if (mapRef.current) {
-                // Remove todos os event listeners
-                if (mapClickHandler) {
-                    mapRef.current.off('click', mapClickHandler);
-                }
-                mapRef.current.remove();
-                mapRef.current = null;
-            }
-        };
-    }, [mostrarMapa, userCoords]);
-
-    // Atualiza marcadores quando postes mudam
-
-    useEffect(() => {
-        if (mapRef.current && markersGroupRef.current) {
-            // Adiciona um debounce para evitar recriações rápidas
-            const timer = setTimeout(() => {
-                addPostMarkers();
-            }, 300);
-
-            return () => clearTimeout(timer);
-        }
-    }, [postesCadastrados]); // Remova outras dependências desnecessárias
-
-    useEffect(() => {
-        const handleClick = (e) => {
-            console.log('Clique no mapa:', e.latlng);
-            if (editingMarker) { // ← AGORA editingMarker JÁ FOI DECLARADO
-                console.log('Marcador em edição:', editingMarker.options.posteId);
-            }
-        };
-
-        if (mapRef.current) {
-            mapRef.current.on('click', handleClick);
-        }
-
-        return () => {
-            if (mapRef.current) {
-                mapRef.current.off('click', handleClick);
-            }
-        };
-    }, [editingMarker]);
-
-    const handleEnderecoChange = (e) => {
-        setEnderecoEditado(true); // Marca que o usuário editou manualmente
-        dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
-        dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
-    };
-
-
-    // ==============================================
-    // SEÇÃO 4: FUNÇÕES PRINCIPAIS
-    // ==============================================
 
 
     // Busca postes cadastrados - Versão otimizada
@@ -288,223 +208,6 @@ function Cadastro() {
             return [];
         }
     };
-
-    // Adicione no início do seu componente, após as declarações de estado
-    const [debugMode, setDebugMode] = useState(false);
-
-    // Adicione isto temporariamente para debug
-    useEffect(() => {
-        if (debugMode) {
-            console.log("--- DEBUG ---");
-            console.log("UserCoords:", userCoords);
-            console.log("Postes cadastrados:", postesCadastrados);
-            if (markersGroupRef.current) {
-                console.log("Marcadores no mapa:", markersGroupRef.current.getLayers());
-            }
-        }
-    }, [debugMode, userCoords, postesCadastrados]);
-
-
-
-    // Inicialização otimizada do mapa
-    const initMap = () => {
-        const mapContainer = document.getElementById('mapa');
-        if (!mapContainer || mapRef.current) return;
-
-        mapRef.current = L.map('mapa', {
-            zoomControl: true,
-            preferCanvas: true
-        }).setView(userCoords, 18);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(mapRef.current);
-
-        markersGroupRef.current = L.layerGroup().addTo(mapRef.current);
-        updateUserMarker(userCoords);
-        addPostMarkers();
-    };
-
-
-    // Modifique a função updateUserMarker para incluir a lógica de mover o marcador selecionado
-    const updateUserMarker = (coords) => {
-        if (!mapRef.current) return;
-
-        // Remove marcador existente
-        if (mapRef.current.userMarker) {
-            mapRef.current.removeLayer(mapRef.current.userMarker);
-        }
-
-        // Adiciona novo marcador
-        mapRef.current.userMarker = L.circleMarker(coords, {
-            color: '#2563eb',
-            fillColor: '#3b82f6',
-            fillOpacity: 1,
-            radius: 8
-        }).addTo(mapRef.current)
-            .bindPopup('Sua localização atual');
-
-        // Se estiver no modo de edição e tiver um marcador selecionado, move para a nova posição
-        if (editMode && selectedMarker) {
-            selectedMarker.setLatLng(coords);
-            selectedMarker._posteData.tempPosition = coords;
-
-            // Atualiza o popup
-            selectedMarker.setPopupContent(`
-            <div class="p-2">
-                <strong>${selectedMarker.options.posteId}</strong>
-                <div class="text-yellow-600 text-xs font-bold">
-                    Nova posição:<br>
-                    Lat: ${coords.lat.toFixed(6)}<br>
-                    Lng: ${coords.lng.toFixed(6)}
-                </div>
-            </div>
-        `);
-        }
-    };
-
-    // Função para entrar no modo de edição
-    const startEditMode = () => {
-        setEditMode(true);
-        setShowEditButtons(false); // Esconde os botões até que um marcador seja selecionado
-
-        // Muda o cursor para indicar modo de seleção
-        if (mapRef.current) {
-            mapRef.current.getContainer().style.cursor = 'pointer';
-        }
-    };
-
-    // Função para selecionar um marcador para edição
-    const selectMarkerForEdit = (marker) => {
-        if (!editMode) return;
-
-        // Desseleciona o marcador anterior se existir
-        if (selectedMarker) {
-            selectedMarker.setIcon(L.divIcon({
-                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
-                className: ''
-            }));
-        }
-
-        // Seleciona o novo marcador
-        setSelectedMarker(marker);
-
-        // Muda a cor do marcador para indicar seleção
-        marker.setIcon(L.divIcon({
-            html: '<div class="bg-yellow-500 rounded-full w-8 h-8 border-2 border-white animate-pulse"></div>',
-            className: ''
-        }));
-
-        // Move o marcador para a posição atual do usuário
-        if (mapRef.current?.userMarker) {
-            const userPos = mapRef.current.userMarker.getLatLng();
-            marker.setLatLng(userPos);
-            marker._posteData.tempPosition = userPos;
-
-            // Atualiza o popup
-            marker.setPopupContent(`
-            <div class="p-2">
-                <strong>${marker.options.posteId}</strong>
-                <div class="text-yellow-600 text-xs font-bold">
-                    Nova posição:<br>
-                    Lat: ${userPos.lat.toFixed(6)}<br>
-                    Lng: ${userPos.lng.toFixed(6)}
-                </div>
-            </div>
-        `);
-        }
-
-        // Mostra os botões de ação
-        setShowEditButtons(true);
-        marker.openPopup();
-    };
-
-    // Modifique a função addPostMarkers para usar o novo sistema de seleção
-    const addPostMarkers = () => {
-        try {
-            console.log('[MARKERS] Iniciando criação de marcadores');
-
-            if (!mapRef.current || !markersGroupRef.current) {
-                throw new Error('Referências do mapa não disponíveis');
-            }
-
-            // Remove o handler de clique anterior se existir
-            if (mapClickHandler) {
-                mapRef.current.off('click', mapClickHandler);
-            }
-
-            // Se já temos marcadores e não estamos editando, não recrie
-            if (markersGroupRef.current.getLayers().length > 0 && !editMode) {
-                console.log('[MARKERS] Marcadores já existem, pulando recriação');
-                return;
-            }
-
-            // Cria um novo handler de clique
-            const handleMapClick = (e) => {
-                // Não faz nada no modo de edição, a menos que seja um clique em um marcador
-                // (isso será tratado pelos eventos do marcador)
-            };
-
-            // Registra o novo handler
-            mapRef.current.on('click', handleMapClick);
-            setMapClickHandler(() => handleMapClick);
-
-            // Limpa marcadores existentes
-            markersGroupRef.current.clearLayers();
-
-            // Cria novos marcadores
-            postesCadastrados.forEach((poste) => {
-                const [lat, lng] = poste.coords || [poste.latitude, poste.longitude];
-                if (!lat || !lng) return;
-
-                const marker = L.marker([lat, lng], {
-                    draggable: false,
-                    posteId: poste.id,
-                    icon: L.divIcon({
-                      html: '<div class="bg-green-600 rounded-full w-4 h-4 border border-black absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>',
-                        className: '',
-                        iconSize: [20, 20],  // Área clicável
-                        iconAnchor: [10, 10]  // Ponto de ancoragem centraliza
-                    })
-                });
-
-                // Armazena dados do poste
-                marker._posteData = {
-                    originalPosition: { lat, lng },
-                    tempPosition: { lat, lng },
-                    isEditing: false
-                };
-
-                // Evento de clique para selecionar no modo de edição
-                marker.on('click', () => {
-                    if (editMode) {
-                        selectMarkerForEdit(marker);
-                    } else {
-                        // Comportamento normal (abrir popup)
-                        marker.openPopup();
-                    }
-                });
-
-                // Popup informativo
-                marker.bindPopup(`
-                <div class="p-2">
-                    <strong>${poste.numeroIdentificacao || poste.id}</strong>
-                    <div class="text-xs">
-                        Lat: ${lat.toFixed(6)}<br>
-                        Lng: ${lng.toFixed(6)}
-                    </div>
-                </div>
-            `);
-
-                markersGroupRef.current.addLayer(marker);
-            });
-
-        } catch (error) {
-            console.error('Erro ao adicionar marcadores:', error);
-        }
-    };
-
 
     // Função para atualizar a posição no backend
     const atualizarPosicaoPoste = async (posteId, lat, lng) => {
@@ -551,18 +254,237 @@ function Cadastro() {
     };
 
 
-    // Função savePosition
-    const savePosition = async () => {
+    // ==============================================
+    // SEÇÃO 3: FUNÇÕES DO MAPA (CORRIGIDAS)
+    // ==============================================
+
+    // Inicialização otimizada do mapa
+    const initMap = useCallback(() => {
+        const mapContainer = document.getElementById('mapa');
+        if (!mapContainer || mapInitialized.current) return;
+
+        // Cria o mapa
+        mapRef.current = L.map('mapa', {
+            zoomControl: true,
+            preferCanvas: true
+        }).setView(userCoords, 18);
+
+        // Adiciona camada de tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(mapRef.current);
+
+        // Inicializa grupo de marcadores
+        markersGroupRef.current = L.layerGroup().addTo(mapRef.current);
+        mapInitialized.current = true;
+
+        // Atualiza marcadores
+        updateUserMarker(userCoords);
+        addPostMarkers();
+    }, [userCoords]);
+
+    // Atualização otimizada do marcador do usuário
+    const updateUserMarker = useCallback((coords) => {
+        if (!mapRef.current || !coords || coords.length !== 2) return;
+
+        // Se o marcador já existe, apenas atualiza sua posição
+        if (mapRef.current.userMarker) {
+            mapRef.current.userMarker.setLatLng(coords);
+        } else {
+            // Cria novo marcador apenas se não existir
+            mapRef.current.userMarker = L.circleMarker(coords, {
+                color: '#2563eb',
+                fillColor: '#3b82f6',
+                fillOpacity: 1,
+                radius: 8
+            }).addTo(mapRef.current)
+                .bindPopup('Sua localização atual');
+        }
+
+        // Lógica de edição
+        if (editMode && selectedMarker) {
+            const newPos = L.latLng(coords);
+            selectedMarker.setLatLng(newPos);
+            selectedMarker._posteData.tempPosition = newPos;
+
+            selectedMarker.setPopupContent(`
+                <div class="p-2">
+                    <strong>${selectedMarker.options.posteId}</strong>
+                    <div class="text-yellow-600 text-xs font-bold">
+                        Nova posição:<br>
+                        Lat: ${newPos.lat.toFixed(6)}<br>
+                        Lng: ${newPos.lng.toFixed(6)}
+                    </div>
+                </div>
+            `);
+        }
+    }, [editMode, selectedMarker]);
+
+    // Adição de marcadores otimizada
+    const addPostMarkers = useCallback(() => {
+        try {
+            if (!mapRef.current || !markersGroupRef.current) {
+                console.warn('Referências do mapa não disponíveis');
+                return;
+            }
+
+            // Remove o handler de clique anterior se existir
+            if (mapClickHandler.current) {
+                mapRef.current.off('click', mapClickHandler.current);
+            }
+
+            // Se já temos marcadores e não estamos editando, não recrie
+            if (markersGroupRef.current.getLayers().length > 0 && !editMode) {
+                return;
+            }
+
+            // Cria um novo handler de clique
+            const handleMapClick = (e) => {
+                if (editingMarker) {
+                    console.log('Marcador em edição:', editingMarker.options.posteId);
+                }
+            };
+
+            // Registra o novo handler
+            mapRef.current.on('click', handleMapClick);
+            mapClickHandler.current = handleMapClick;
+
+            // Limpa marcadores existentes
+            markersGroupRef.current.clearLayers();
+
+            // Cria novos marcadores
+            postesCadastrados.forEach((poste) => {
+                const [lat, lng] = poste.coords || [poste.latitude, poste.longitude];
+                if (!lat || !lng) return;
+
+                 // Cria um ícone personalizado com o número do poste
+            const numeroDisplay = poste.numeroIdentificacao 
+            ? poste.numeroIdentificacao.split('-')[0] 
+            : poste.id.slice(0, 4);
+
+                const marker = L.marker([lat, lng], {
+                    draggable: false,
+                    posteId: poste.id,
+                    icon: L.divIcon({
+                        html: '<div class="bg-green-600 rounded-full w-4 h-4 border border-black absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>',
+                        className: '',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                });
+
+                // Armazena dados do poste
+                marker._posteData = {
+                    originalPosition: { lat, lng },
+                    tempPosition: { lat, lng },
+                    isEditing: false
+                };
+
+                marker.on('click', () => {
+                    if (editMode) {
+                        selectMarkerForEdit(marker);
+                    } else {
+                        marker.openPopup();
+                    }
+                });
+
+                marker.bindPopup(`
+                    <div class="p-2">
+                        <strong>${poste.numeroIdentificacao || poste.id}</strong>
+                        <div class="text-xs">
+                            Lat: ${lat.toFixed(6)}<br>
+                            Lng: ${lng.toFixed(6)}
+                        </div>
+                    </div>
+                `);
+
+                markersGroupRef.current.addLayer(marker);
+            });
+
+        } catch (error) {
+            console.error('Erro ao adicionar marcadores:', error);
+        }
+    }, [postesCadastrados, editMode, editingMarker]);
+    
+
+    // Funções de edição otimizadas
+    const startEditMode = useCallback(() => {
+        setEditMode(true);
+        setShowEditButtons(false);
+
+        if (mapRef.current) {
+            mapRef.current.getContainer().style.cursor = 'pointer';
+        }
+    }, []);
+
+    const selectMarkerForEdit = useCallback((marker) => {
+        if (!editMode) return;
+
+        if (selectedMarker) {
+            selectedMarker.setIcon(L.divIcon({
+                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
+                className: ''
+            }));
+        }
+
+        setSelectedMarker(marker);
+
+        marker.setIcon(L.divIcon({
+            html: '<div class="bg-yellow-500 rounded-full w-8 h-8 border-2 border-white animate-pulse"></div>',
+            className: ''
+        }));
+
+        if (mapRef.current?.userMarker) {
+            const userPos = mapRef.current.userMarker.getLatLng();
+            marker.setLatLng(userPos);
+            marker._posteData.tempPosition = userPos;
+
+            marker.setPopupContent(`
+                <div class="p-2">
+                    <strong>${marker.options.posteId}</strong>
+                    <div class="text-yellow-600 text-xs font-bold">
+                        Nova posição:<br>
+                        Lat: ${userPos.lat.toFixed(6)}<br>
+                        Lng: ${userPos.lng.toFixed(6)}
+                    </div>
+                </div>
+            `);
+        }
+
+        setShowEditButtons(true);
+        marker.openPopup();
+    }, [editMode, selectedMarker]);
+
+    const exitEditMode = useCallback(() => {
+        setEditMode(false);
+        setSelectedMarker(null);
+        setShowEditButtons(false);
+
+        if (mapRef.current) {
+            mapRef.current.getContainer().style.cursor = '';
+        }
+    }, []);
+
+    const cancelEdit = useCallback(() => {
+        if (selectedMarker) {
+            selectedMarker.setLatLng(selectedMarker._posteData.originalPosition);
+            selectedMarker.setIcon(L.divIcon({
+                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
+                className: ''
+            }));
+        }
+        exitEditMode();
+    }, [selectedMarker, exitEditMode]);
+
+    const savePosition = useCallback(async () => {
         if (!selectedMarker) return;
 
         try {
             const newPos = selectedMarker._posteData.tempPosition;
-            console.log('Salvando nova posição:', newPos);
 
-            // Atualiza no backend
             await atualizarPosicaoPoste(selectedMarker.options.posteId, newPos.lat, newPos.lng);
 
-            // Atualiza o estado global
             setPostesCadastrados(prev =>
                 prev.map(poste =>
                     poste.id === selectedMarker.options.posteId
@@ -576,7 +498,6 @@ function Cadastro() {
                 )
             );
 
-            // Restaura o ícone normal
             selectedMarker.setIcon(L.divIcon({
                 html: '<div class="bg-yellow-500 rounded-full w-6 h-6 border border-black animate-pulse absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>',
                 className: '',
@@ -584,10 +505,7 @@ function Cadastro() {
                 iconAnchor: [10, 10]
             }));
 
-            // Atualiza a posição original
             selectedMarker._posteData.originalPosition = newPos;
-
-            // Sai do modo de edição
             exitEditMode();
 
         } catch (error) {
@@ -595,35 +513,65 @@ function Cadastro() {
             alert(`Erro: ${error.message}`);
             cancelEdit();
         }
-    };
+    }, [selectedMarker, exitEditMode, cancelEdit]);
 
-    // Função para cancelar edição
-    const cancelEdit = () => {
-        if (selectedMarker) {
-            // Volta para posição original
-            selectedMarker.setLatLng(selectedMarker._posteData.originalPosition);
+    // ==============================================
+    // SEÇÃO 4: EFEITOS COLATERAIS (OTIMIZADOS)
+    // ==============================================
 
-            // Restaura o ícone normal
-            selectedMarker.setIcon(L.divIcon({
-                html: '<div class="bg-green-600 rounded-full w-6 h-6 border-2 border-white"></div>',
-                className: ''
-            }));
+    // Atualiza coordenadas quando o hook retorna novas
+    useEffect(() => {
+        if (liveCoords && !isLastPost && !arraysEqual(liveCoords, userCoords)) {
+            setUserCoords(liveCoords);
+            setUserAccuracy(accuracy);
+
+            if (mostrarMapa && mapInitialized.current) {
+                updateUserMarker(liveCoords);
+            }
+        }
+    }, [liveCoords, accuracy, isLastPost, userCoords, mostrarMapa, updateUserMarker, arraysEqual]);
+
+    // Inicialização do mapa
+    useEffect(() => {
+        if (mostrarMapa && userCoords && !mapInitialized.current) {
+            initMap();
         }
 
-        exitEditMode();
-    };
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.off();
+                mapRef.current.remove();
+                mapRef.current = null;
+                markersGroupRef.current = null;
+                mapInitialized.current = false;
+            }
+        };
+    }, [mostrarMapa, userCoords, initMap]);
 
-    // Função para sair do modo de edição
-    const exitEditMode = () => {
-        setEditMode(false);
-        setSelectedMarker(null);
-        setShowEditButtons(false);
+    // Atualiza marcadores quando postes mudam
+    useEffect(() => {
+        if (mapInitialized.current) {
+            const timer = setTimeout(() => {
+                addPostMarkers();
+            }, 300);
 
-        // Restaura o cursor padrão
-        if (mapRef.current) {
-            mapRef.current.getContainer().style.cursor = '';
+            return () => clearTimeout(timer);
         }
+    }, [postesCadastrados, addPostMarkers]);
+
+    useEffect(() => {
+        if (mapInitialized.current && postesCadastrados.length > 0) {
+            addPostMarkers();
+        }
+    }, [postesCadastrados, addPostMarkers]);
+
+    const handleEnderecoChange = (e) => {
+        setEnderecoEditado(true); // Marca que o usuário editou manualmente
+        dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
+        dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
     };
+
+
 
 
     const reutilizarDadosPosteAnterior = () => {
@@ -976,12 +924,21 @@ function Cadastro() {
             if (resposta.data.success) {
                 alert('Poste cadastrado com sucesso!');
 
-                // Atualizamos o poste anterior com os dados atuais
-                setPosteAnterior({
+                const novoPoste = {
                     ...state,
+                    id: resposta.data.id || Date.now().toString(),
                     coords: userCoords,
-                    id: resposta.data.id || Date.now().toString()
-                });
+                    latitude: userCoords[0],
+                    longitude: userCoords[1],
+                    numeroIdentificacao: state.numeroIdentificacao
+                };
+
+                // Atualizamos o poste anterior com os dados atuais
+                setPosteAnterior(
+                    novoPoste
+                );
+
+                setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
 
                 // Limpamos as fotos
                 setFotos([]);
@@ -990,6 +947,11 @@ function Cadastro() {
                     field: 'localizacao',
                     value: ""
                 });
+
+                // Atualiza o mapa para mostrar o novo marcador
+                if (mapRef.current && markersGroupRef.current) {
+                    addPostMarkers();
+                }
 
             } else {
                 throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
@@ -1100,8 +1062,8 @@ function Cadastro() {
                                         }
                                     }}
                                     className={`px-4 py-2 rounded-md text-white ${editMode
-                                            ? 'bg-orange-600 hover:bg-orange-700'
-                                            : 'bg-red-600 hover:bg-red-700'
+                                        ? 'bg-orange-600 hover:bg-orange-700'
+                                        : 'bg-red-600 hover:bg-red-700'
                                         }`}
                                 >
                                     {editMode ? 'Cancelar Edição' : 'Fechar Mapa'}
@@ -1119,8 +1081,8 @@ function Cadastro() {
                                         }
                                     }}
                                     className={`px-4 py-2 rounded-md text-white ${editMode
-                                            ? 'bg-green-600 hover:bg-green-700'
-                                            : 'bg-blue-600 hover:bg-blue-700'
+                                        ? 'bg-green-600 hover:bg-green-700'
+                                        : 'bg-blue-600 hover:bg-blue-700'
                                         }`}
                                 >
                                     {editMode ? 'Salvar Alterações' : 'Editar Localizações'}

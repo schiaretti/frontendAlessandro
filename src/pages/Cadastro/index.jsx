@@ -113,7 +113,6 @@ function Cadastro() {
     const [erroEspecieArvore, setErroEspecieArvore] = useState(null);
     const [editingMarker, setEditingMarker] = useState(null);
     const [showEditButtons, setShowEditButtons] = useState(false);
-    //const [mapClickHandler, setMapClickHandler] = useState(null);
     const [mapDraggingEnabled, setMapDraggingEnabled] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [selectedMarker, setSelectedMarker] = useState(null);
@@ -358,10 +357,10 @@ function Cadastro() {
                 const [lat, lng] = poste.coords || [poste.latitude, poste.longitude];
                 if (!lat || !lng) return;
 
-                 // Cria um ícone personalizado com o número do poste
-            const numeroDisplay = poste.numeroIdentificacao 
-            ? poste.numeroIdentificacao.split('-')[0] 
-            : poste.id.slice(0, 4);
+                // Cria um ícone personalizado com o número do poste
+                const numeroDisplay = poste.numeroIdentificacao
+                    ? poste.numeroIdentificacao.split('-')[0]
+                    : poste.id.slice(0, 4);
 
                 const marker = L.marker([lat, lng], {
                     draggable: false,
@@ -406,7 +405,7 @@ function Cadastro() {
             console.error('Erro ao adicionar marcadores:', error);
         }
     }, [postesCadastrados, editMode, editingMarker]);
-    
+
 
     // Funções de edição otimizadas
     const startEditMode = useCallback(() => {
@@ -983,132 +982,24 @@ function Cadastro() {
                         Cadastro de Postes
                     </h1>
 
-                    {/* Seção de Localização */}
-                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                        <h2 className="text-xl font-semibold mb-3">Localização</h2>
 
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Número do Poste
-                            </label>
-                            <input
-                                type="text"
-                                value={state.numeroIdentificacao || ""}
-                                onChange={(e) => handleFieldChange('numeroIdentificacao', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Número gerado automaticamente - edite se necessário
-                            </p>
-                        </div>
 
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                onClick={obterLocalizacaoUsuario}
-                                disabled={isLoadingLocation}
-                                className={`px-4 py-2 rounded-md text-white ${isLoadingLocation ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'}`}
-                            >
-                                {isLoadingLocation ? 'Obtendo localização...' : 'Obter Localização'}
-                            </button>
-
-                            {userCoords && (
-                                <button
-                                    onClick={() => setMostrarMapa(!mostrarMapa)}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                                >
-                                    {mostrarMapa ? 'Ocultar Mapa' : 'Mostrar Mapa'}
-                                </button>
-                            )}
-
-                            {posteAnterior && (
-                                <button
-                                    onClick={reutilizarDadosPosteAnterior}
-                                    className={`px-4 py-2 rounded-md ${reutilizarDados ? 'bg-purple-800' : 'bg-purple-600 hover:bg-purple-700'} text-white`}
-                                >
-                                    {reutilizarDados ? 'Dados Prontos para Reuso' : 'Reutilizar Dados'}
-                                </button>
-                            )}
-                        </div>
-
-                        {localizacaoError && (
-                            <div className="mt-2 text-red-600">{localizacaoError}</div>
-                        )}
-
-                        {userAccuracy && (
-                            <div className="mt-2 text-sm text-gray-600">
-                                Precisão: ~{Math.round(userAccuracy)} metros
-                            </div>
-                        )}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Número do Poste
+                        </label>
+                        <input
+                            type="text"
+                            value={state.numeroIdentificacao || ""}
+                            onChange={(e) => handleFieldChange('numeroIdentificacao', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Número gerado automaticamente - edite se necessário
+                        </p>
                     </div>
 
-                    {mostrarMapa && (
-                        <div className="mb-6">
-                            <div
-                                id="mapa"
-                                className="h-[80vh] w-full rounded-lg border border-gray-300"
-                                style={{ minHeight: '400px', maxHeight: '600px' }}
-                            ></div>
 
-                            <div className="flex gap-2 mt-2">
-                                {/* Botão principal - muda de função conforme o estado */}
-                                <button
-                                    onClick={() => {
-                                        if (editMode) {
-                                            // Se estiver editando, cancela a edição
-                                            cancelEdit();
-                                        } else {
-                                            // Se não estiver editando, fecha o mapa
-                                            setMostrarMapa(false);
-                                        }
-                                    }}
-                                    className={`px-4 py-2 rounded-md text-white ${editMode
-                                        ? 'bg-orange-600 hover:bg-orange-700'
-                                        : 'bg-red-600 hover:bg-red-700'
-                                        }`}
-                                >
-                                    {editMode ? 'Cancelar Edição' : 'Fechar Mapa'}
-                                </button>
-
-                                {/* Botão secundário - alterna entre editar/salvar */}
-                                <button
-                                    onClick={() => {
-                                        if (editMode) {
-                                            // Se estiver editando, salva as alterações
-                                            savePosition();
-                                        } else {
-                                            // Se não estiver editando, inicia a edição
-                                            startEditMode();
-                                        }
-                                    }}
-                                    className={`px-4 py-2 rounded-md text-white ${editMode
-                                        ? 'bg-green-600 hover:bg-green-700'
-                                        : 'bg-blue-600 hover:bg-blue-700'
-                                        }`}
-                                >
-                                    {editMode ? 'Salvar Alterações' : 'Editar Localizações'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-
-
-                    {showEditButtons && (
-                        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 z-50">
-                            <button
-                                onClick={savePosition}
-                                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-                            >
-                                Salvar
-                            </button>
-                            <button
-                                onClick={cancelEdit}
-                                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    )}
 
 
                     {/* Campos de Localização */}
@@ -1213,82 +1104,96 @@ function Cadastro() {
                     </div>
 
                     {/* Seção de Fotos */}
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                        <BotaoCamera
-                            id="foto-panoramica"
-                            label="Foto Panorâmica"
-                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.PANORAMICA, file)}
-                            obrigatorio={true}
-                            erro={erroFotos?.includes('Panorâmica')}
-                        />
-                        <p className="text-center text-sm mt-2 font-medium">
-                            PANORÂMICA<span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) ? (
-                                <span className="text-green-500 ml-2">✓ Adicionada</span>
-                            ) : (
-                                <span className="text-gray-500 ml-2">(Obrigatória)</span>
-                            )}
-                        </p>
+                    <div className="space-y-4"> {/* Adiciona espaçamento consistente entre as seções */}
+
+                        {/* Foto Panorâmica */}
+                        <div className="bg-gray-50 rounded-lg overflow-hidden"> {/* Remove borda e padding interno */}
+                            <div className="p-4">
+                                <BotaoCamera
+                                    id="foto-panoramica"
+                                    label="Foto Panorâmica"
+                                    onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.PANORAMICA, file)}
+                                    obrigatorio={true}
+                                    erro={erroFotos?.includes('Panorâmica')}
+                                />
+                                <p className="text-center text-sm mt-2 font-medium">
+                                    PANORÂMICA<span className="text-red-500">*</span>
+                                    {fotos.some(f => f.tipo === TIPOS_FOTO.PANORAMICA) ? (
+                                        <span className="text-green-500 ml-2">✓ Adicionada</span>
+                                    ) : (
+                                        <span className="text-gray-500 ml-2">(Obrigatória)</span>
+                                    )}
+                                </p>
+                            </div>
+                            <div className="border-t border-gray-200 h-[3px]"></div> {/* Substitui o hr */}
+                        </div>
+
+                        {/* Foto Luminária */}
+                        <div className="bg-gray-50 rounded-lg overflow-hidden">
+                            <div className="p-4">
+                                <BotaoCamera
+                                    id="foto-Luminaria"
+                                    label="Foto Luminária"
+                                    onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LUMINARIA, file)}
+                                    obrigatorio={true}
+                                    erro={erroFotos?.includes('Luminária')}
+                                />
+                                <p className="text-center text-sm mt-2 font-medium">
+                                    LUMINÁRIA<span className="text-red-500">*</span>
+                                    {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) ? (
+                                        <span className="text-green-500 ml-2">✓ Adicionada</span>
+                                    ) : (
+                                        <span className="text-gray-500 ml-2">(Obrigatória)</span>
+                                    )}
+                                </p>
+                            </div>
+                            <div className="border-t border-gray-200 h-[3px]"></div>
+                        </div>
+
+                        {/* Foto Telecom */}
+                        <div className="bg-gray-50 rounded-lg overflow-hidden">
+                            <div className="p-4">
+                                <BotaoCamera
+                                    id="foto-telecom"
+                                    label="Foto Telecom (Opcional)"
+                                    onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.TELECOM, file)}
+                                    obrigatorio={false}
+                                    erro={erroFotos?.includes('Telecom')}
+                                />
+                                <p className="text-center text-sm mt-2 font-medium">
+                                    TELECOM
+                                    {fotos.some(f => f.tipo === TIPOS_FOTO.TELECOM) ? (
+                                        <span className="text-green-500 ml-2">✓ Adicionada</span>
+                                    ) : (
+                                        <span className="text-gray-500 ml-2">(Opcional)</span>
+                                    )}
+                                </p>
+                            </div>
+                            <div className="border-t border-gray-200 h-[3px]"></div>
+                        </div>
+
+                        {/* Foto Lâmpada */}
+                        <div className="bg-gray-50 rounded-lg overflow-hidden">
+                            <div className="p-4">
+                                <BotaoCamera
+                                    id="foto-Lampada"
+                                    label="Foto Lâmpada (Opcional)"
+                                    onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LAMPADA, file)}
+                                    obrigatorio={false}
+                                    erro={erroFotos?.includes('Lampada')}
+                                />
+                                <p className="text-center text-sm mt-2 font-medium">
+                                    LÂMPADA
+                                    {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADA) ? (
+                                        <span className="text-green-500 ml-2">✓ Adicionada</span>
+                                    ) : (
+                                        <span className="text-gray-500 ml-2">(Opcional)</span>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+
                     </div>
-
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                        <BotaoCamera
-                            id="foto-Luminaria"
-                            label="Foto Luminária"
-                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LUMINARIA, file)}
-                            obrigatorio={true}
-                            erro={erroFotos?.includes('Luminária')}
-                        />
-                        <p className="text-center text-sm mt-2 font-medium">
-                            LUMINÁRIA<span className="text-red-500">*</span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.LUMINARIA) ? (
-                                <span className="text-green-500 ml-2">✓ Adicionada</span>
-                            ) : (
-                                <span className="text-gray-500 ml-2">(Obrigatória)</span>
-                            )}
-                        </p>
-                    </div>
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                        <BotaoCamera
-                            id="foto-telecom"
-                            label="Foto Telecom (Opcional)"
-                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.TELECOM, file)}
-                            obrigatorio={false}
-                            erro={erroFotos?.includes('Telecom')}
-                        />
-                        <p className="text-center text-sm mt-2 font-medium">
-                            TELECOM<span className="text-red-500"></span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.TELECOM) ? (
-                                <span className="text-green-500 ml-2">✓ Adicionada</span>
-                            ) : (
-                                <span className="text-gray-500 ml-2">(Opcional)</span>
-                            )}
-                        </p>
-                    </div>
-
-                    <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
-
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                        <BotaoCamera
-                            id="foto-Lampada"
-                            label="Foto Lâmpada (Opcional)"
-                            onFotoCapturada={(file) => handleAdicionarFoto(TIPOS_FOTO.LAMPADA, file)}
-                            obrigatorio={false}
-                            erro={erroFotos?.includes('Lampada')}
-                        />
-                        <p className="text-center text-sm mt-2 font-medium">
-                            LÂMPADA<span className="text-red-500"></span>
-                            {fotos.some(f => f.tipo === TIPOS_FOTO.LAMPADA) ? (
-                                <span className="text-green-500 ml-2">✓ Adicionada</span>
-                            ) : (
-                                <span className="text-gray-500 ml-2">(Opcional)</span>
-                            )}
-                        </p>
-                    </div>
-
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* Seção de Árvore */}

@@ -26,7 +26,7 @@ export default function CadastroUsuarios() {
     setError(null);
 
     try {
-      const response = await api.post('/cadastro-usuarios', formData);
+      const response = await api.post('api/cadastro-usuarios', formData);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Erro no cadastro');

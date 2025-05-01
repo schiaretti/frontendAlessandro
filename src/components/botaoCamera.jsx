@@ -279,7 +279,7 @@ const BotaoCamera = ({ label, onFotoCapturada }) => {
           <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-4 flex flex-col items-center">
             <button
               onClick={capturarFoto}
-              className="bg-white rounded-full p-3 mb-2 shadow-lg"
+              className="bg-white rounded-full p-3 mb-2 shadow-lg hover:bg-gray-100 transition-colors"
             >
               <FaCamera className="text-2xl text-gray-800" />
             </button>
@@ -301,16 +301,16 @@ const BotaoCamera = ({ label, onFotoCapturada }) => {
             className="w-full h-auto max-h-96 object-contain"
           />
           
-          <div className="flex justify-between p-2 bg-gray-100">
+          <div className="grid grid-cols-2 gap-2 p-2 bg-gray-100 sm:flex sm:justify-between">
             <button
               onClick={cancelarFoto}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
+              className="flex items-center justify-center gap-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors w-full"
             >
               <FaTimes /> Refazer
             </button>
             <button
               onClick={confirmarFoto}
-              className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+              className="flex items-center justify-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors w-full"
             >
               <FaSave /> Confirmar
             </button>

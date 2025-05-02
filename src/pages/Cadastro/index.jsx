@@ -9,7 +9,7 @@ import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { FaTrash } from "react-icons/fa6";
-import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera } from 'react-icons/fa';
+import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera, FaCheckCircle } from 'react-icons/fa';
 import MedidorCamera from "../../components/MedidorCamera.jsx";
 
 // Tipos de fotos permitidas
@@ -131,6 +131,25 @@ function Cadastro() {
     const [tamanhoReferencia, setTamanhoReferencia] = useState(1); // 1 metro padrão
     const [isMedindo, setIsMedindo] = useState(false);
     const [fotoTemporaria, setFotoTemporaria] = useState(null);
+    // Estados para notificação
+    const [notificacao, setNotificacao] = useState({
+        mostrar: false,
+        mensagem: '',
+        tipo: 'sucesso' // 'sucesso' | 'erro'
+    });
+
+    // Função para mostrar notificação
+    const mostrarNotificacao = (mensagem, tipo = 'sucesso') => {
+        setNotificacao({
+            mostrar: true,
+            mensagem,
+            tipo
+        });
+
+        setTimeout(() => {
+            setNotificacao(prev => ({ ...prev, mostrar: false }));
+        }, 3000);
+    };
 
 
     // Autenticação (otimizada com useMemo)
@@ -1041,7 +1060,7 @@ function Cadastro() {
                 quantidadeFaixas: state.quantidadeFaixas ? parseInt(state.quantidadeFaixas) : null,
                 tipoPasseio: state.tipoPasseio,
                 canteiroCentral: state.canteiroCentral === 'Sim',
-                larguraCanteiro: state.larguraCanteiro,
+                larguraCanteiro: state.larguraCanteiro ? parseInt(state.larguraCanteiro) : null,
                 finalidadeInstalacao: state.finalidadeInstalacao,
                 numeroIdentificacao: state.numeroIdentificacao,
                 coords: JSON.stringify([userCoords[0], userCoords[1]]),
@@ -1108,7 +1127,17 @@ function Cadastro() {
 
             // Se a resposta for positiva
             if (resposta.data.success) {
-                alert('Poste cadastrado com sucesso!');
+                const mostrarNotificacao = (mensagem, tipo = 'sucesso') => {
+                    setNotificacao({
+                        mostrar: true,
+                        mensagem,
+                        tipo
+                    });
+
+                    setTimeout(() => {
+                        setNotificacao(prev => ({ ...prev, mostrar: false }));
+                    }, 3000);
+                };;
 
                 const novoPoste = {
                     ...state,
@@ -1933,51 +1962,87 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
                     </div>
 
-                    {/* Botão de Salvar e Reutilizar Dados */}
-                    <div className="mt-6 space-y-4">
-                        <Checkbox
-                            label="Este é o último poste da rua"
-                            checked={isLastPost}
-                            onChange={(e) => setIsLastPost(e.target.checked)}
-                            className="mb-4"
-                        />
+                    {/* Seção de Botões com Notificação Integrada */}
+                    <div className="mt-8 space-y-4">
+                        {/* Checkbox Estilizado */}
+                        <div className="flex items-center mb-5">
+                            <Checkbox
+                                id="ultimoPoste"
+                                label="Este é o último poste da rua"
+                                checked={isLastPost}
+                                onChange={(e) => setIsLastPost(e.target.checked)}
+                                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                        </div>
+
+                        {/* Container de Notificação (será mostrado quando necessário) */}
+                        {notificacao.mostrar && (
+                            <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl flex items-center space-x-2
+      ${notificacao.tipo === 'sucesso' ?
+                                    'bg-green-500 border-l-4 border-green-700' :
+                                    'bg-red-500 border-l-4 border-red-700'} 
+      text-white animate-fade-in`}>
+                                {notificacao.tipo === 'sucesso' ? (
+                                    <FaCheckCircle className="text-xl" />
+                                ) : (
+                                    <FaExclamationCircle className="text-xl" />
+                                )}
+                                <span className="font-medium">{notificacao.mensagem}</span>
+                            </div>
+                        )}
 
                         {/* Botão Salvar Cadastro */}
                         <button
-                            onClick={handleSalvarCadastro}
-                            className="flex items-center justify-center w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onClick={async () => {
+                                try {
+                                    await handleSalvarCadastro();
+                                    mostrarNotificacao('Poste cadastrado com sucesso!', 'sucesso');
+                                } catch (error) {
+                                    mostrarNotificacao(error.message || 'Erro ao cadastrar poste', 'erro');
+                                }
+                            }}
+                            className="flex items-center justify-center w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-6 rounded-lg 
+               hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 
+               transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] group"
                         >
-                            <FaSave className="mr-2" />
-                            Salvar Cadastro
+                            <FaSave className="mr-3 transition-transform group-hover:scale-110" />
+                            <span className="font-medium tracking-wide">Salvar Cadastro</span>
                         </button>
 
-                        {/* Botão Reutilizar com Confirmação */}
+                        {/* Botão Reutilizar Dados */}
                         {!mostrarConfirmacao ? (
                             <button
                                 onClick={() => setMostrarConfirmacao(true)}
-                                className="flex items-center justify-center w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                className="flex items-center justify-center w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-3 px-6 rounded-lg 
+                 hover:from-yellow-600 hover:to-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 
+                 transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] group"
                             >
-                                <FaRecycle className="mr-2" />
-                                Reutilizar Dados Anteriores
+                                <FaRecycle className="mr-3 transition-transform group-hover:rotate-180" />
+                                <span className="font-medium tracking-wide">Reutilizar Dados Anteriores</span>
                             </button>
                         ) : (
-                            <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="flex flex-col sm:flex-row gap-3">
                                 <button
                                     onClick={() => {
                                         reutilizarDadosPosteAnterior();
                                         setMostrarConfirmacao(false);
+                                        mostrarNotificacao('Dados reutilizados com sucesso!', 'sucesso');
                                     }}
-                                    className="flex items-center justify-center flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600"
+                                    className="flex-1 flex items-center justify-center bg-gradient-to-r from-green-500 to-green-600 text-white py-3 px-6 rounded-lg 
+                   hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 
+                   transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] group"
                                 >
-                                    <FaCheck className="mr-2" />
-                                    Confirmar
+                                    <FaCheck className="mr-2 group-hover:scale-125 transition-transform" />
+                                    <span>Confirmar</span>
                                 </button>
                                 <button
                                     onClick={() => setMostrarConfirmacao(false)}
-                                    className="flex items-center justify-center flex-1 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600"
+                                    className="flex-1 flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 text-white py-3 px-6 rounded-lg 
+                   hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 
+                   transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] group"
                                 >
-                                    <FaTimes className="mr-2" />
-                                    Cancelar
+                                    <FaTimes className="mr-2 group-hover:scale-125 transition-transform" />
+                                    <span>Cancelar</span>
                                 </button>
                             </div>
                         )}

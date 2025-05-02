@@ -9,6 +9,7 @@ import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { FaTrash } from "react-icons/fa6";
+import { FaSave, FaRecycle, FaCheck, FaTimes } from 'react-icons/fa';
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -117,6 +118,7 @@ function Cadastro() {
     const [editMode, setEditMode] = useState(false);
     const [selectedMarker, setSelectedMarker] = useState(null);
     const [enderecoEditado, setEnderecoEditado] = useState(false);
+    const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
 
 
     // Autenticação (otimizada com useMemo)
@@ -606,6 +608,57 @@ function Cadastro() {
         } else {
             alert("Nenhum poste anterior encontrado para reutilizar dados.");
         }
+    };
+
+    const BotaoReutilizarDados = ({ posteAnterior, onReutilizar, onConfirmar, onCancelar }) => {
+        const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
+
+        const handleReutilizarClick = () => {
+            if (posteAnterior) {
+                setMostrarConfirmacao(true);
+            } else {
+                alert("Nenhum poste anterior encontrado para reutilizar dados.");
+            }
+        };
+
+        const handleConfirmar = () => {
+            onReutilizar();
+            onConfirmar();
+            setMostrarConfirmacao(false);
+        };
+
+        const handleCancelar = () => {
+            onCancelar();
+            setMostrarConfirmacao(false);
+        };
+
+        return (
+            <div className="mt-4 space-y-2">
+                {!mostrarConfirmacao ? (
+                    <button
+                        onClick={handleReutilizarClick}
+                        className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
+                    >
+                        Reutilizar Dados do Poste Anterior
+                    </button>
+                ) : (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                            onClick={handleConfirmar}
+                            className="flex-1 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors"
+                        >
+                            Confirmar Reutilização
+                        </button>
+                        <button
+                            onClick={handleCancelar}
+                            className="flex-1 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
     };
 
     const obterLocalizacaoUsuario = async () => {
@@ -1709,8 +1762,8 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
                     </div>
 
-                    {/* Botão de Salvar */}
-                    <div className="mt-6">
+                    {/* Botão de Salvar e Reutilizar Dados */}
+                    <div className="mt-6 space-y-4">
                         <Checkbox
                             label="Este é o último poste da rua"
                             checked={isLastPost}
@@ -1718,12 +1771,45 @@ function Cadastro() {
                             className="mb-4"
                         />
 
+                        {/* Botão Salvar Cadastro */}
                         <button
                             onClick={handleSalvarCadastro}
-                            className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="flex items-center justify-center w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
+                            <FaSave className="mr-2" />
                             Salvar Cadastro
                         </button>
+
+                        {/* Botão Reutilizar com Confirmação */}
+                        {!mostrarConfirmacao ? (
+                            <button
+                                onClick={() => setMostrarConfirmacao(true)}
+                                className="flex items-center justify-center w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                            >
+                                <FaRecycle className="mr-2" />
+                                Reutilizar Dados Anteriores
+                            </button>
+                        ) : (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <button
+                                    onClick={() => {
+                                        reutilizarDadosPosteAnterior();
+                                        setMostrarConfirmacao(false);
+                                    }}
+                                    className="flex items-center justify-center flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600"
+                                >
+                                    <FaCheck className="mr-2" />
+                                    Confirmar
+                                </button>
+                                <button
+                                    onClick={() => setMostrarConfirmacao(false)}
+                                    className="flex items-center justify-center flex-1 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600"
+                                >
+                                    <FaTimes className="mr-2" />
+                                    Cancelar
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

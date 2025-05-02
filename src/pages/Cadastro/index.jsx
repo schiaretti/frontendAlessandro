@@ -9,7 +9,8 @@ import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { FaTrash } from "react-icons/fa6";
-import { FaSave, FaRecycle, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera } from 'react-icons/fa';
+import MedidorCamera from "../../components/MedidorCamera.jsx";
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -26,7 +27,11 @@ function formReducer(state, action) {
         case 'UPDATE_FIELD':
             return { ...state, [action.field]: action.value };
         case 'RESET':
-            return { ...initialState, numeroIdentificacao: gerarNumeroAutomatico() };
+            return {
+                ...initialState,
+                ...(action.payload || {}), // Aceita os dados passados
+                numeroIdentificacao: action.payload?.numeroIdentificacao || gerarNumeroAutomatico()
+            };
         default:
             return state;
     }
@@ -63,6 +68,7 @@ const initialState = {
     quantidadeFaixas: "",
     tipoPasseio: "",
     canteiroCentral: "",
+    larguraCanteiro: "",
     finalidadeInstalacao: "",
     especieArvore: "",
     distanciaEntrePostes: "",
@@ -119,6 +125,12 @@ function Cadastro() {
     const [selectedMarker, setSelectedMarker] = useState(null);
     const [enderecoEditado, setEnderecoEditado] = useState(false);
     const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
+    const [modoMedicao, setModoMedicao] = useState(null); // 'referencia' ou 'canteiro'
+    const [pontos, setPontos] = useState({ referencia: [], canteiro: [] });
+    const [imagemMedida, setImagemMedida] = useState(null);
+    const [tamanhoReferencia, setTamanhoReferencia] = useState(1); // 1 metro padrão
+    const [isMedindo, setIsMedindo] = useState(false);
+    const [fotoTemporaria, setFotoTemporaria] = useState(null);
 
 
     // Autenticação (otimizada com useMemo)
@@ -575,90 +587,72 @@ function Cadastro() {
 
 
 
-    const reutilizarDadosPosteAnterior = () => {
-        if (posteAnterior) {
-            // Cria cópia segura do posteAnterior
-            const dadosParaReutilizar = {
-                ...posteAnterior,
-                fotos: [], // Reseta as fotos
-                coords: undefined // Remove coordenadas
+    const reutilizarDadosPosteAnterior = async () => {
+        // Verificação segura dos dados necessários
+        if (!posteAnterior || !Array.isArray(userCoords) || userCoords.length !== 2) {
+            alert(posteAnterior
+                ? "Localização atual inválida. Obtenha uma nova localização primeiro."
+                : "Nenhum poste anterior disponível para reutilização.");
+            return;
+        }
+
+        try {
+            // 1. Calcula distância com validação
+            const distancia = posteAnterior.coords?.length === 2
+                ? calcularDistancia(
+                    posteAnterior.coords[0],
+                    posteAnterior.coords[1],
+                    userCoords[0],
+                    userCoords[1]
+                )
+                : null;
+
+            // 2. Prepara os dados com proteção contra undefined
+            const dadosReutilizados = {
+                ...initialState, // Garante todos os campos do estado
+                ...posteAnterior, // Sobrescreve com dados do poste anterior
+                numeroIdentificacao: gerarNumeroAutomatico(),
+                coords: [...userCoords], // Cópia do array
+                latitude: userCoords[0],
+                longitude: userCoords[1],
+                distanciaEntrePostes: distancia,
+                fotos: []
             };
 
-            const novoNumero = gerarNumeroAutomatico();
-
-            // Atualiza cada campo individualmente
-            Object.keys(dadosParaReutilizar).forEach(key => {
-                if (key in initialState && dadosParaReutilizar[key] !== undefined) {
-                    dispatch({
-                        type: 'UPDATE_FIELD',
-                        field: key,
-                        value: dadosParaReutilizar[key]
-                    });
+            // 3. Remove campos não utilizados no formulário
+            const camposParaManter = Object.keys(initialState);
+            Object.keys(dadosReutilizados).forEach(key => {
+                if (!camposParaManter.includes(key)) {
+                    delete dadosReutilizados[key];
                 }
             });
 
+            // 4. Atualização otimizada do estado
             dispatch({
-                type: 'UPDATE_FIELD',
-                field: 'numeroIdentificacao',
-                value: novoNumero
+                type: 'RESET',
+                payload: dadosReutilizados // Sobrescreve todo o estado
             });
 
-            setReutilizarDados(true);
-            alert("Dados do poste anterior carregados! Agora atualize a localização.");
-        } else {
-            alert("Nenhum poste anterior encontrado para reutilizar dados.");
-        }
-    };
-
-    const BotaoReutilizarDados = ({ posteAnterior, onReutilizar, onConfirmar, onCancelar }) => {
-        const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
-
-        const handleReutilizarClick = () => {
-            if (posteAnterior) {
-                setMostrarConfirmacao(true);
-            } else {
-                alert("Nenhum poste anterior encontrado para reutilizar dados.");
+            // 5. Atualiza o mapa de forma segura
+            try {
+                await fetchPostesCadastrados();
+            } catch (error) {
+                console.warn("Erro ao atualizar postes no mapa:", error);
+                // Não impede o fluxo principal
             }
-        };
 
-        const handleConfirmar = () => {
-            onReutilizar();
-            onConfirmar();
-            setMostrarConfirmacao(false);
-        };
+            // Feedback visual (opcional)
+            setFotos([]);
+            setReutilizarDados(true);
 
-        const handleCancelar = () => {
-            onCancelar();
-            setMostrarConfirmacao(false);
-        };
-
-        return (
-            <div className="mt-4 space-y-2">
-                {!mostrarConfirmacao ? (
-                    <button
-                        onClick={handleReutilizarClick}
-                        className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
-                    >
-                        Reutilizar Dados do Poste Anterior
-                    </button>
-                ) : (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                            onClick={handleConfirmar}
-                            className="flex-1 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors"
-                        >
-                            Confirmar Reutilização
-                        </button>
-                        <button
-                            onClick={handleCancelar}
-                            className="flex-1 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
-                        >
-                            Cancelar
-                        </button>
-                    </div>
-                )}
-            </div>
-        );
+        } catch (error) {
+            console.error("Falha crítica ao reutilizar dados:", {
+                error: error.message,
+                posteAnterior,
+                userCoords
+            });
+            alert(`Falha ao reutilizar dados: ${error.message || 'Erro desconhecido'}`);
+        }
     };
 
     const obterLocalizacaoUsuario = async () => {
@@ -741,6 +735,91 @@ function Cadastro() {
         setMostrarMapa(false);
     };
 
+    const MedicaoCamera = () => {
+        const canvasRef = useRef(null);
+
+        const handleFotoTirada = (foto) => {
+            setImagemMedida(foto);
+            setModoMedicao('referencia');
+        };
+
+        const handleClickImagem = (e) => {
+            const canvas = canvasRef.current;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (modoMedicao === 'referencia' && pontos.referencia.length < 2) {
+                setPontos(prev => ({ ...prev, referencia: [...prev.referencia, { x, y }] }));
+            } else if (modoMedicao === 'canteiro' && pontos.canteiro.length < 2) {
+                setPontos(prev => ({ ...prev, canteiro: [...prev.canteiro, { x, y }] }));
+            }
+        };
+
+        // Calcula distância em pixels entre dois pontos
+        const calcularDistanciaPixels = (pontoA, pontoB) => {
+            return Math.sqrt(Math.pow(pontoB.x - pontoA.x, 2) + Math.pow(pontoB.y - pontoA.y, 2));
+        };
+
+        // Calcula a largura real
+        const calcularLargura = () => {
+            if (pontos.referencia.length === 2 && pontos.canteiro.length === 2) {
+                const pixelsReferencia = calcularDistanciaPixels(pontos.referencia[0], pontos.referencia[1]);
+                const pixelsCanteiro = calcularDistanciaPixels(pontos.canteiro[0], pontos.canteiro[1]);
+                return (pixelsCanteiro * tamanhoReferencia) / pixelsReferencia;
+            }
+            return null;
+        };
+
+        return (
+            <div>
+                <BotaoCamera onFotoCapturada={handleFotoTirada} label="Tirar foto para medição" />
+
+                {imagemMedida && (
+                    <div className="relative">
+                        <img
+                            src={imagemMedida}
+                            alt="Medição"
+                            className="max-w-full h-auto"
+                        />
+                        <canvas
+                            ref={canvasRef}
+                            onClick={handleClickImagem}
+                            className="absolute inset-0 w-full h-full cursor-crosshair"
+                        />
+
+                        <div className="my-2">
+                            {modoMedicao === 'referencia' && (
+                                <div>
+                                    <p>Marque <strong>dois pontos</strong> no objeto de referência (ex: trena de 1m)</p>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={tamanhoReferencia}
+                                        onChange={(e) => setTamanhoReferencia(parseFloat(e.target.value))}
+                                        placeholder="Tamanho real da referência (metros)"
+                                    />
+                                </div>
+                            )}
+
+                            {pontos.referencia.length === 2 && (
+                                <button onClick={() => setModoMedicao('canteiro')}>
+                                    Agora marque a largura do canteiro
+                                </button>
+                            )}
+
+                            {pontos.canteiro.length === 2 && (
+                                <div className="bg-green-100 p-2">
+                                    Largura calculada: <strong>{calcularLargura().toFixed(2)} metros</strong>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // Helper para nomes de tipos de foto
     const getNomeTipoFoto = (tipo) => {
         const nomes = {
@@ -809,8 +888,10 @@ function Cadastro() {
         }
     };
 
+    // ==============================================
+    // CÁLCULOS GEOESPACIAIS
+    // ==============================================
 
-    // Calcula distância entre coordenadas
     const calcularDistancia = (lat1, lon1, lat2, lon2) => {
         const R = 6371e3; // Raio da Terra em metros
         const φ1 = lat1 * Math.PI / 180;
@@ -826,12 +907,64 @@ function Cadastro() {
         return Math.round(R * c);
     };
 
-    // Logout
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-    };
+    // Monitora mudanças de posição para cálculo automático de distância
 
+    useEffect(() => {
+        // 1. Verificação inicial simplificada
+        if (!posteAnterior?.coords || !userCoords) {
+            dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'distanciaEntrePostes',
+                value: ''
+            });
+            return;
+        }
+
+        // 2. Verificação de coordenadas iguais
+        if (arraysEqual(posteAnterior.coords, userCoords)) {
+            dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'distanciaEntrePostes',
+                value: '0 metros (mesma localização)'
+            });
+            return;
+        }
+
+        // 3. Cálculo seguro da distância
+        try {
+            const [lat1, lon1] = posteAnterior.coords;
+            const [lat2, lon2] = userCoords;
+
+            // Verificação adicional de coordenadas válidas
+            if (
+                typeof lat1 !== 'number' || typeof lon1 !== 'number' ||
+                typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
+                isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)
+            ) {
+                throw new Error('Coordenadas inválidas');
+            }
+
+            const distancia = Math.round(calcularDistancia(lat1, lon1, lat2, lon2));
+            dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'distanciaEntrePostes',
+                value: distancia > 0 ? `${distancia} metros` : '0 metros (mesma localização)'
+            });
+
+        } catch (error) {
+            console.error("Erro no cálculo de distância:", {
+                error: error.message,
+                coordsAnterior: posteAnterior?.coords,
+                coordsAtual: userCoords
+            });
+
+            dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'distanciaEntrePostes',
+                value: 'Erro no cálculo'
+            });
+        }
+    }, [userCoords, posteAnterior]);
 
 
     const handleSalvarCadastro = async () => {
@@ -908,6 +1041,7 @@ function Cadastro() {
                 quantidadeFaixas: state.quantidadeFaixas ? parseInt(state.quantidadeFaixas) : null,
                 tipoPasseio: state.tipoPasseio,
                 canteiroCentral: state.canteiroCentral === 'Sim',
+                larguraCanteiro: state.larguraCanteiro,
                 finalidadeInstalacao: state.finalidadeInstalacao,
                 numeroIdentificacao: state.numeroIdentificacao,
                 coords: JSON.stringify([userCoords[0], userCoords[1]]),
@@ -1717,13 +1851,44 @@ function Cadastro() {
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
-                        <div className="col-span-1 md:col-span-2 mb-4 text-center">
-                            <label className="mb-4 text-gray-700 font-extrabold">Largura do canteiro central ?</label>
+                        <div className="col-span-1 md:col-span-2">
+                            <label className="block text-gray-700 font-extrabold mb-2">
+                                Largura do canteiro central
+                            </label>
+
+                            {/* Input principal */}
                             <input
-                                placeholder="Em Metros"
-                                type="text"
-                                className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                type="number"
+                                step="0.1"
+                                value={state.larguraCanteiro || ''}
+                                onChange={(e) => handleFieldChange('larguraCanteiro', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Digite o valor em metros"
                             />
+
+                            {/* Botão de medição */}
+                            <button
+                                onClick={() => setIsMedindo(true)}
+                                className="mt-2 w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
+                            >
+                                <FaCamera className="h-5 w-5" />
+                                Medir com câmera
+                            </button>
+
+                            {/* Modal de medição */}
+                            {isMedindo && (
+                                <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+                                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                                        <MedidorCamera
+                                            onFinish={(medida) => {
+                                                handleFieldChange('larguraCanteiro', medida);
+                                                setIsMedindo(false);
+                                            }}
+                                            onCancel={() => setIsMedindo(false)}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
@@ -1733,14 +1898,20 @@ function Cadastro() {
                             <input
                                 placeholder="Em Metros (calculado automaticamente)"
                                 type="text"
-                                value={state.distanciaEntrePostes}
+                                value={state.distanciaEntrePostes || ''}
                                 readOnly
-                                className="w-full px-3 py-2 border mt-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
+                                className={`w-full px-3 py-2 border mt-2 rounded-md focus:ring-blue-500 focus:border-blue-500 ${state.distanciaEntrePostes
+                                    ? "border-green-300 bg-green-50"
+                                    : "border-gray-300 bg-gray-100"
+                                    }`}
                             />
-                            <small className="text-gray-500">
+                            <small className={`block mt-1 text-sm ${state.distanciaEntrePostes
+                                ? "text-green-600 font-medium"
+                                : "text-gray-500"
+                                }`}>
                                 {state.distanciaEntrePostes ?
-                                    "Distância calculada automaticamente do poste anterior" :
-                                    "Será calculado após o próximo poste"}
+                                    "✔ Distância calculada automaticamente" :
+                                    "Será calculado quando você registrar o próximo poste"}
                             </small>
                         </div>
 
@@ -1813,7 +1984,7 @@ function Cadastro() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 

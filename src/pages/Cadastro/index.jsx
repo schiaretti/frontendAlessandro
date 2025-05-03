@@ -29,11 +29,13 @@ function formReducer(state, action) {
         case 'RESET':
             return {
                 ...initialState,
-                ...(action.payload || {}), // Aceita os dados passados
-                numeroIdentificacao: action.payload?.numeroIdentificacao || gerarNumeroAutomatico()
+                ...(action.payload || {}),
+                numeroIdentificacao: action.payload?.numeroIdentificacao || gerarNumeroAutomatico(),
+                isLastPost: action.payload?.isLastPost || 'false' // Mantém o valor ou volta para false
             };
         default:
             return state;
+
     }
 }
 
@@ -73,6 +75,7 @@ const initialState = {
     especieArvore: "",
     distanciaEntrePostes: "",
     numeroIdentificacao: "",
+    isLastPost: "false",
 };
 
 // Função para gerar número automático (movida para fora do componente)
@@ -1114,6 +1117,79 @@ function Cadastro() {
             });
 
             // Enviamos os dados para o servidor
+            /*const resposta = await axios.post(
+                'https://backendalesandro-production.up.railway.app/api/postes',
+                formularioDados,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
+            );
+
+            // Se a resposta for positiva
+             if (resposta.data.success) {
+                 const mostrarNotificacao = (mensagem, tipo = 'sucesso') => {
+                     setNotificacao({
+                         mostrar: true,
+                         mensagem,
+                         tipo
+                     });
+ 
+                     setTimeout(() => {
+                         setNotificacao(prev => ({ ...prev, mostrar: false }));
+                     }, 3000);
+                 };;
+ 
+                 const novoPoste = {
+                     ...state,
+                     id: resposta.data.id || Date.now().toString(),
+                     coords: userCoords,
+                     latitude: userCoords[0],
+                     longitude: userCoords[1],
+                     numeroIdentificacao: state.numeroIdentificacao
+                 };
+ 
+                 // Atualizamos o poste anterior com os dados atuais
+                 setPosteAnterior(
+                     novoPoste
+                 );
+ 
+                 setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
+ 
+                 // Limpamos as fotos
+                 setFotos([]);
+                 dispatch({
+                     type: 'UPDATE_FIELD',
+                     field: 'localizacao',
+                     value: ""
+                 });
+ 
+                 // Atualiza o mapa para mostrar o novo marcador
+                 if (mapRef.current && markersGroupRef.current) {
+                     addPostMarkers();
+                 }
+ 
+             } else {
+                 throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
+             }
+ 
+         } catch (erro) {
+             console.error('Erro ao salvar cadastro:', erro);
+ 
+             let mensagemErro = 'Erro ao cadastrar poste';
+             if (erro.response?.data?.message) {
+                 mensagemErro = erro.response.data.message;
+             } else if (erro.message) {
+                 mensagemErro = erro.message;
+             }
+ 
+             alert(mensagemErro);
+         }
+     };*/
+
+            // Enviamos os dados para o servidor
             const resposta = await axios.post(
                 'https://backendalesandro-production.up.railway.app/api/postes',
                 formularioDados,
@@ -1127,18 +1203,6 @@ function Cadastro() {
 
             // Se a resposta for positiva
             if (resposta.data.success) {
-                const mostrarNotificacao = (mensagem, tipo = 'sucesso') => {
-                    setNotificacao({
-                        mostrar: true,
-                        mensagem,
-                        tipo
-                    });
-
-                    setTimeout(() => {
-                        setNotificacao(prev => ({ ...prev, mostrar: false }));
-                    }, 3000);
-                };;
-
                 const novoPoste = {
                     ...state,
                     id: resposta.data.id || Date.now().toString(),
@@ -1148,20 +1212,35 @@ function Cadastro() {
                     numeroIdentificacao: state.numeroIdentificacao
                 };
 
-                // Atualizamos o poste anterior com os dados atuais
-                setPosteAnterior(
-                    novoPoste
-                );
-
+                // Atualiza o poste anterior com os dados atuais
+                setPosteAnterior(novoPoste);
                 setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
 
-                // Limpamos as fotos
+                // Verifica se é o último poste para limpar o formulário
+                if (state.isLastPost === 'true') {
+                    dispatch({
+                        type: 'RESET',
+                        payload: {
+                            cidade: state.cidade,
+                            endereco: state.endereco,
+                            localizacao: state.localizacao,
+                            isLastPost: 'false' // Reseta o checkbox
+                        }
+                    });
+
+                    // Adicione esta linha para forçar atualização dos ComboBoxes
+                    setReutilizarDados(prev => !prev); // Truque para forçar re-render
+
+                    mostrarNotificacao('Último poste cadastrado! Formulário preparado para novo registro', 'sucesso');
+                } else {
+                    mostrarNotificacao('Poste cadastrado com sucesso!', 'sucesso');
+                }
+
+                // Limpa as fotos em ambos os casos
                 setFotos([]);
-                dispatch({
-                    type: 'UPDATE_FIELD',
-                    field: 'localizacao',
-                    value: ""
-                });
+                setFotoArvore(null);
+                setEspecieArvore('');
+                setEspecieCustom('');
 
                 // Atualiza o mapa para mostrar o novo marcador
                 if (mapRef.current && markersGroupRef.current) {
@@ -1182,9 +1261,11 @@ function Cadastro() {
                 mensagemErro = erro.message;
             }
 
-            alert(mensagemErro);
+            mostrarNotificacao(mensagemErro, 'erro');
         }
-    };
+    }
+
+
 
     // ==============================================
     // SEÇÃO 5: RENDERIZAÇÃO
@@ -1969,8 +2050,12 @@ function Cadastro() {
                             <Checkbox
                                 id="ultimoPoste"
                                 label="Este é o último poste da rua"
-                                checked={isLastPost}
-                                onChange={(e) => setIsLastPost(e.target.checked)}
+                                checked={state.isLastPost === 'true'}
+                                onChange={(e) => dispatch({
+                                    type: 'UPDATE_FIELD',
+                                    field: 'isLastPost',
+                                    value: e.target.checked ? 'true' : 'false'
+                                })}
                                 className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
                             />
                         </div>

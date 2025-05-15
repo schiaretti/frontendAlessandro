@@ -430,22 +430,8 @@ const Mapa = ({
             </div>
           )}
 
-          {showEditButtons && (
-            <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 z-50">
-              <button
-                onClick={savePosition}
-                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-              >
-                Salvar
-              </button>
-              <button
-                onClick={cancelEdit}
-                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
+      
+          
         </div>
       </div>
     </div>

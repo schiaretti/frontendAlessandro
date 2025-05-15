@@ -11,6 +11,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { FaTrash } from "react-icons/fa6";
 import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera, FaCheckCircle } from 'react-icons/fa';
 import MedidorCamera from "../../components/MedidorCamera.jsx";
+import { salvarCadastroOffline, sincronizarComBackend } from '../../db';
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -134,6 +135,45 @@ function Cadastro() {
     const [tamanhoReferencia, setTamanhoReferencia] = useState(1); // 1 metro padrão
     const [isMedindo, setIsMedindo] = useState(false);
     const [fotoTemporaria, setFotoTemporaria] = useState(null);
+
+    // Autenticação (otimizada com useMemo)
+    const [token, setToken] = useState(localStorage.getItem('token'));
+    const decoded = useMemo(() => token ? JSON.parse(atob(token.split('.')[1])) : null, [token]);
+    const usuarioId = decoded?.id;
+
+    // Redireciona se não autenticado (igual)
+    if (!usuarioId) {
+        alert('Usuário não autenticado. Redirecionando para login...');
+        window.location.href = '/login';
+        return null;
+    }
+
+
+    useEffect(() => {
+        let mounted = true;
+
+        const handleOnline = async () => {
+            if (mounted && navigator.onLine && token) {
+                try {
+                    await sincronizarComBackend(token);
+                    mostrarNotificacao('Dados sincronizados com sucesso!', 'sucesso');
+                } catch (error) {
+                    mostrarNotificacao('Falha na sincronização: ' + error.message, 'erro');
+                }
+            }
+        };
+
+        window.addEventListener('online', handleOnline);
+
+        // Sincroniza imediatamente se já estiver online
+        handleOnline();
+
+        return () => {
+            mounted = false;
+            window.removeEventListener('online', handleOnline);
+        };
+    }, [token]);
+
     // Estados para notificação
     const [notificacao, setNotificacao] = useState({
         mostrar: false,
@@ -155,17 +195,6 @@ function Cadastro() {
     };
 
 
-    // Autenticação (otimizada com useMemo)
-    const [token, setToken] = useState(localStorage.getItem('token'));
-    const decoded = useMemo(() => token ? JSON.parse(atob(token.split('.')[1])) : null, [token]);
-    const usuarioId = decoded?.id;
-
-    // Redireciona se não autenticado (igual)
-    if (!usuarioId) {
-        alert('Usuário não autenticado. Redirecionando para login...');
-        window.location.href = '/login';
-        return null;
-    }
 
     // Hook de localização (igual)
     const { coords: liveCoords, endereco, accuracy, error: locationError } = useGetLocation(isLastPost || isFirstPostRegistered);
@@ -990,7 +1019,7 @@ function Cadastro() {
 
 
     const handleSalvarCadastro = async () => {
-        // Primeiro, definimos todos os campos obrigatórios do formulário
+        // 1. Validação dos campos obrigatórios (mantido igual)
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
             { campo: 'endereco', nome: 'Endereço' },
@@ -1004,19 +1033,17 @@ function Cadastro() {
             { campo: 'potenciaLampada', nome: 'Potência da Lâmpada' }
         ];
 
-        // Verificamos quais campos obrigatórios não foram preenchidos
         const camposNaoPreenchidos = camposObrigatorios
             .filter((item) => !state[item.campo]?.toString().trim())
             .map((item) => item.nome);
 
-        // Se houver campos não preenchidos, mostramos um alerta e interrompemos a função
         if (camposNaoPreenchidos.length > 0) {
             alert(`Por favor, preencha os seguintes campos obrigatórios:\n${camposNaoPreenchidos.join(', ')}`);
             return;
         }
 
         try {
-            // Calculamos a distância entre postes se existir um poste anterior
+            // 2. Prepara os dados (igual ao seu original)
             let distanciaEntrePostesCalculada = null;
             if (posteAnterior?.coords) {
                 distanciaEntrePostesCalculada = Math.round(
@@ -1029,10 +1056,6 @@ function Cadastro() {
                 );
             }
 
-            // Criamos um novo objeto FormData para enviar os dados
-            const formularioDados = new FormData();
-
-            // Preparamos todos os dados que serão enviados
             const dadosParaEnviar = {
                 cidade: state.cidade,
                 endereco: state.endereco,
@@ -1074,14 +1097,7 @@ function Cadastro() {
                 distanciaEntrePostes: distanciaEntrePostesCalculada
             };
 
-            // Adicionamos cada campo ao FormData
-            Object.entries(dadosParaEnviar).forEach(([chave, valor]) => {
-                if (valor !== null && valor !== undefined) {
-                    formularioDados.append(chave, valor.toString());
-                }
-            });
-
-            // Verificamos se as fotos obrigatórias foram adicionadas
+            // 3. Verificação das fotos obrigatórias (igual)
             const tiposDeFotosEnviadas = fotos.map((foto) => foto.tipo);
             const fotosObrigatorias = ['PANORAMICA', 'LUMINARIA'];
             const fotosFaltando = fotosObrigatorias.filter(
@@ -1092,117 +1108,47 @@ function Cadastro() {
                 throw new Error(`Fotos obrigatórias não adicionadas: ${fotosFaltando.join(', ')}`);
             }
 
-            // Adicionamos cada foto ao FormData
-            fotos.forEach((foto, indice) => {
-                formularioDados.append(`fotos`, foto.arquivo);
-                formularioDados.append(`tipos`, foto.tipo);
+            // 4. Lógica Online/Offline
+            if (navigator.onLine) {
+                // ========== MODO ONLINE ==========
+                const formularioDados = new FormData();
 
-                if (foto.tipo === 'ARVORE') {
-                    formularioDados.append(`especies`, foto.especie);
-                    const coordenadas = foto.coords || userCoords;
-                    formularioDados.append(`latitudes`, coordenadas[0].toString());
-                    formularioDados.append(`longitudes`, coordenadas[1].toString());
-                }
-            });
-
-            // Mostramos os dados no console para debug
-            console.log('Dados que serão enviados:', {
-                dadosPrincipais: dadosParaEnviar,
-                fotos: {
-                    total: fotos.length,
-                    panoramica: fotos.some((f) => f.tipo === 'PANORAMICA'),
-                    luminaria: fotos.some((f) => f.tipo === 'LUMINARIA'),
-                    arvores: fotos.filter((f) => f.tipo === 'ARVORE').length
-                }
-            });
-
-            // Enviamos os dados para o servidor
-            /*const resposta = await axios.post(
-                'https://backendalesandro-production.up.railway.app/api/postes',
-                formularioDados,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        'Authorization': `Bearer ${token}`
+                // Adiciona campos ao FormData
+                Object.entries(dadosParaEnviar).forEach(([chave, valor]) => {
+                    if (valor !== null && valor !== undefined) {
+                        formularioDados.append(chave, valor.toString());
                     }
-                }
-            );
+                });
 
-            // Se a resposta for positiva
-             if (resposta.data.success) {
-                 const mostrarNotificacao = (mensagem, tipo = 'sucesso') => {
-                     setNotificacao({
-                         mostrar: true,
-                         mensagem,
-                         tipo
-                     });
- 
-                     setTimeout(() => {
-                         setNotificacao(prev => ({ ...prev, mostrar: false }));
-                     }, 3000);
-                 };;
- 
-                 const novoPoste = {
-                     ...state,
-                     id: resposta.data.id || Date.now().toString(),
-                     coords: userCoords,
-                     latitude: userCoords[0],
-                     longitude: userCoords[1],
-                     numeroIdentificacao: state.numeroIdentificacao
-                 };
- 
-                 // Atualizamos o poste anterior com os dados atuais
-                 setPosteAnterior(
-                     novoPoste
-                 );
- 
-                 setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
- 
-                 // Limpamos as fotos
-                 setFotos([]);
-                 dispatch({
-                     type: 'UPDATE_FIELD',
-                     field: 'localizacao',
-                     value: ""
-                 });
- 
-                 // Atualiza o mapa para mostrar o novo marcador
-                 if (mapRef.current && markersGroupRef.current) {
-                     addPostMarkers();
-                 }
- 
-             } else {
-                 throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
-             }
- 
-         } catch (erro) {
-             console.error('Erro ao salvar cadastro:', erro);
- 
-             let mensagemErro = 'Erro ao cadastrar poste';
-             if (erro.response?.data?.message) {
-                 mensagemErro = erro.response.data.message;
-             } else if (erro.message) {
-                 mensagemErro = erro.message;
-             }
- 
-             alert(mensagemErro);
-         }
-     };*/
-
-            // Enviamos os dados para o servidor
-            const resposta = await axios.post(
-                'https://backendalesandro-production.up.railway.app/api/postes',
-                formularioDados,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        'Authorization': `Bearer ${token}`
+                // Adiciona fotos
+                fotos.forEach((foto) => {
+                    formularioDados.append('fotos', foto.arquivo);
+                    formularioDados.append('tipos', foto.tipo);
+                    if (foto.tipo === 'ARVORE') {
+                        formularioDados.append('especies', foto.especie);
+                        const coordenadas = foto.coords || userCoords;
+                        formularioDados.append('latitudes', coordenadas[0].toString());
+                        formularioDados.append('longitudes', coordenadas[1].toString());
                     }
-                }
-            );
+                });
 
-            // Se a resposta for positiva
-            if (resposta.data.success) {
+                // Envia para o backend
+                const resposta = await axios.post(
+                    'https://backendalesandro-production.up.railway.app/api/postes',
+                    formularioDados,
+                    {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    }
+                );
+
+                if (!resposta.data.success) {
+                    throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
+                }
+
+                // Atualiza estado após sucesso
                 const novoPoste = {
                     ...state,
                     id: resposta.data.id || Date.now().toString(),
@@ -1212,58 +1158,69 @@ function Cadastro() {
                     numeroIdentificacao: state.numeroIdentificacao
                 };
 
-                // Atualiza o poste anterior com os dados atuais
                 setPosteAnterior(novoPoste);
                 setPostesCadastrados(prevPostes => [...prevPostes, novoPoste]);
 
-                // Verifica se é o último poste para limpar o formulário
-                if (state.isLastPost === 'true') {
-                    dispatch({
-                        type: 'RESET',
-                        payload: {
-                            cidade: state.cidade,
-                            endereco: state.endereco,
-                            localizacao: state.localizacao,
-                            isLastPost: 'false' // Reseta o checkbox
-                        }
-                    });
-
-                    // Adicione esta linha para forçar atualização dos ComboBoxes
-                    setReutilizarDados(prev => !prev); // Truque para forçar re-render
-
-                    mostrarNotificacao('Último poste cadastrado! Formulário preparado para novo registro', 'sucesso');
-                } else {
-                    mostrarNotificacao('Poste cadastrado com sucesso!', 'sucesso');
-                }
-
-                // Limpa as fotos em ambos os casos
-                setFotos([]);
-                setFotoArvore(null);
-                setEspecieArvore('');
-                setEspecieCustom('');
-
-                // Atualiza o mapa para mostrar o novo marcador
-                if (mapRef.current && markersGroupRef.current) {
-                    addPostMarkers();
-                }
-
             } else {
-                throw new Error(resposta.data.message || 'Erro ao cadastrar no servidor');
+                // ========== MODO OFFLINE ==========
+                // Salva no IndexedDB
+                const cadastroId = await salvarCadastroOffline(dadosParaEnviar, fotos);
+
+                // Cria objeto temporário para o estado
+                const novoPosteOffline = {
+                    ...state,
+                    id: `offline-${cadastroId}`,
+                    coords: userCoords,
+                    latitude: userCoords[0],
+                    longitude: userCoords[1],
+                    numeroIdentificacao: state.numeroIdentificacao,
+                    status: 'offline'
+                };
+
+                setPosteAnterior(novoPosteOffline);
+                setPostesCadastrados(prevPostes => [...prevPostes, novoPosteOffline]);
+
+                mostrarNotificacao(
+                    'Cadastro salvo offline e será sincronizado quando a conexão voltar',
+                    'sucesso'
+                );
+            }
+
+            // 5. Limpeza final (executa em ambos os casos)
+            if (state.isLastPost === 'true') {
+                dispatch({
+                    type: 'RESET',
+                    payload: {
+                        cidade: state.cidade,
+                        endereco: state.endereco,
+                        localizacao: state.localizacao,
+                        isLastPost: 'false'
+                    }
+                });
+                setReutilizarDados(prev => !prev);
+                mostrarNotificacao('Último poste cadastrado! Formulário preparado para novo registro', 'sucesso');
+            } else {
+                mostrarNotificacao(navigator.onLine
+                    ? 'Poste cadastrado com sucesso!'
+                    : 'Poste salvo offline!',
+                    'sucesso');
+            }
+
+            setFotos([]);
+            setFotoArvore(null);
+            setEspecieArvore('');
+            setEspecieCustom('');
+
+            if (mapRef.current && markersGroupRef.current) {
+                addPostMarkers();
             }
 
         } catch (erro) {
             console.error('Erro ao salvar cadastro:', erro);
-
-            let mensagemErro = 'Erro ao cadastrar poste';
-            if (erro.response?.data?.message) {
-                mensagemErro = erro.response.data.message;
-            } else if (erro.message) {
-                mensagemErro = erro.message;
-            }
-
+            const mensagemErro = erro.response?.data?.message || erro.message || 'Erro ao cadastrar poste';
             mostrarNotificacao(mensagemErro, 'erro');
         }
-    }
+    };
 
 
 

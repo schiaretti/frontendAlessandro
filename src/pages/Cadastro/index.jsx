@@ -652,7 +652,7 @@ function Cadastro() {
         setEnderecoEditado(true);
     };
 
-    
+
     // Função para lidar com edições manuais
     const handleCampoEditado = (field) => {
         setCamposEditados(prev => ({ ...prev, [field]: true }));
@@ -1338,26 +1338,27 @@ function Cadastro() {
                                 )}
                             </div>
 
-                            {/* Campo Endereço */}
                             <div className="relative">
                                 <label className="block text-sm font-medium text-gray-700">Endereço</label>
                                 <input
                                     type="text"
                                     value={state.enderecoInput || ""}
                                     onChange={(e) => {
-                                        // Verifica se handleEnderecoChange existe antes de chamar
-                                        if (typeof handleEnderecoChange === 'function') {
-                                            handleEnderecoChange(e);
-                                        } else {
-                                            // Fallback básico caso a função não exista
-                                            handleFieldChange('enderecoInput', e.target.value);
+                                        const value = e.target.value;
+                                        // Atualiza apenas o estado diretamente, sem lógica complexa
+                                        handleFieldChange('enderecoInput', value);
+                                        handleFieldChange('endereco', value);
+
+                                        // Marca como editado apenas se o valor for diferente do automático
+                                        if (!endereco || value !== endereco.rua) {
+                                            setCamposEditados(prev => ({ ...prev, endereco: true }));
                                         }
-                                        setCamposEditados(prev => ({ ...prev, endereco: true }));
                                     }}
                                     onBlur={() => {
-                                        // Verificação segura do objeto endereco
-                                        if (endereco?.rua && !camposEditados.endereco) {
+                                        // Restaura apenas se não foi editado e há valor automático disponível
+                                        if (endereco?.rua && !camposEditados.endereco && state.enderecoInput !== endereco.rua) {
                                             handleFieldChange('enderecoInput', endereco.rua);
+                                            handleFieldChange('endereco', endereco.rua);
                                         }
                                     }}
                                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1367,12 +1368,11 @@ function Cadastro() {
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setCamposEditados(prev => ({ ...prev, endereco: false }));
-                                            // Verificação segura do objeto endereco
                                             if (endereco?.rua) {
                                                 handleFieldChange('enderecoInput', endereco.rua);
                                                 handleFieldChange('endereco', endereco.rua);
                                             }
+                                            setCamposEditados(prev => ({ ...prev, endereco: false }));
                                         }}
                                         className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
                                     >

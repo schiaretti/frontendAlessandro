@@ -27,16 +27,27 @@ const DashboardHome = () => {
     }
   };
 
+  const fetchUsuariosCount = async () => {
+    try {
+        const response = await api.get('/listar-usuarios?count=true');
+        return response.data.count; // Retorna apenas o número
+    } catch (error) {
+        console.error('Erro ao contar usuários:', error);
+        return 0; // Fallback em caso de erro
+    }
+};
+
   const fetchDashboardData = async () => {
     try {
       setDashboardData(prev => ({ ...prev, loading: true, error: null }));
       
       // Aqui você pode adicionar as outras chamadas para usuários e cidades
       const postesCount = await fetchPostesCount();
+      const usuariosCount = await fetchUsuariosCount();
 
       setDashboardData({
         postes: postesCount,
-        usuarios: 0, // Substitua por chamada real
+        usuarios: usuariosCount,
         cidades: 0,  // Substitua por chamada real
         loading: false,
         error: null

@@ -1,42 +1,3 @@
-/*import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Cadastro from './pages/Cadastro';
-import ErrorBoundary from './components/ErrorBoundary';
-import ProtectedRoute from './components/protectedRoute';
-import CadastroUsuarios from './pages/CadastroUsuarios/index.jsx';
-
-function App() {
-  return (
-    <BrowserRouter>
-      <ErrorBoundary>
-        <Routes>
-          {/* Rota pública de login */
-         /* <Route path="/" element={<Login />} />
-
-
-          {/* Rota de cadastro (protegida) */
-          /*<Route path="/Cadastro" element={
-            <ProtectedRoute allowedLevels={['cadastrador', 'admin']}>
-              <Cadastro />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/Cadastro-usuarios" element={
-            <ProtectedRoute allowedLevels={['admin']}>
-              <CadastroUsuarios />
-            </ProtectedRoute>
-          } />
-
-          {/* Rota de fallback para páginas não encontradas */
-          /*<Route path="*" element={<Navigate to="/Cadastro" replace />} />
-        </Routes>
-      </ErrorBoundary>
-    </BrowserRouter>
-  );
-}
-
-export default App;*/
-
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Cadastro from './pages/Cadastro';
@@ -46,6 +7,7 @@ import CadastroUsuarios from './pages/CadastroUsuarios';
 import Cidades from './pages/Cidades';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/Dashboard/DashboardHome';
+import Relatorios from './pages/Relatorio';
 
 function App() {
   return (
@@ -65,6 +27,7 @@ function App() {
             <Route path="/Cadastro" element={<Cadastro />} />
             <Route path="/CadastroUsuarios" element={<CadastroUsuarios />} />
             <Route path="/Cidades" element={<Cidades />} />
+             <Route path="/relatorios/postes" element={<Relatorios />} />
           </Route>
 
           {/* Rota de fallback */}

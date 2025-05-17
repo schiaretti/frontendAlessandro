@@ -9,7 +9,7 @@ export default function CadastroUsuarios() {
     senha: '',
     nivel: 'cadastrador'
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -26,7 +26,10 @@ export default function CadastroUsuarios() {
     setError(null);
 
     try {
-      const response = await api.post('api/cadastro-usuarios', formData);
+
+      const token = localStorage.getItem('token');
+
+      const response = await api.post('/cadastro-usuarios', formData);
 
       if (!response.data.success) {
         throw new Error(response.data.message || 'Erro no cadastro');
@@ -37,7 +40,15 @@ export default function CadastroUsuarios() {
 
     } catch (error) {
       console.error('Erro no cadastro:', error);
-      setError(error.response?.data?.message || error.message || 'Erro ao cadastrar usuário');
+
+      // Tratamento mais específico de erros
+      if (error.response?.status === 401) {
+        setError('Acesso não autorizado - Faça login como administrador');
+      } else if (error.response?.status === 404) {
+        setError('Rota não encontrada - Verifique a URL do servidor');
+      } else {
+        setError(error.response?.data?.message || error.message || 'Erro ao cadastrar usuário');
+      }
     } finally {
       setLoading(false);
     }
@@ -47,7 +58,7 @@ export default function CadastroUsuarios() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-bold text-center mb-6">Cadastro de Usuário</h1>
-        
+
         {/* Mensagens de feedback */}
         {error && (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
@@ -139,13 +150,12 @@ export default function CadastroUsuarios() {
             >
               Voltar
             </button>
-            
+
             <button
               type="submit"
               disabled={loading}
-              className={`px-4 py-2 rounded-md text-white ${
-                loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              className={`px-4 py-2 rounded-md text-white ${loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
             >
               {loading ? 'Cadastrando...' : 'Cadastrar Usuário'}
             </button>

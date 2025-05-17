@@ -135,6 +135,13 @@ function Cadastro() {
     const [tamanhoReferencia, setTamanhoReferencia] = useState(1); // 1 metro padrão
     const [isMedindo, setIsMedindo] = useState(false);
     const [fotoTemporaria, setFotoTemporaria] = useState(null);
+    const [camposEditados, setCamposEditados] = useState({
+        cidade: false,
+        endereco: false,
+        cep: false,
+        numero: false,
+        localizacao: false
+    });
 
     // Autenticação (otimizada com useMemo)
     const [token, setToken] = useState(localStorage.getItem('token'));
@@ -214,24 +221,32 @@ function Cadastro() {
         return a.length === b.length && a.every((val, index) => val === b[index]);
     }, []);
 
-    // Preenche campos do endereço automaticamente
+    // Efeito modificado
     useEffect(() => {
-        if (endereco && !enderecoEditado) {
-            dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
-            dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
-            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
-            dispatch({ type: 'UPDATE_FIELD', field: 'cep', value: endereco.cep || state.cep });
+        if (endereco) {
+            // Atualiza apenas os campos não editados manualmente
+            if (!camposEditados.cidade) {
+                dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
+            }
 
-            if (!isNumeroManual) {
+            if (!camposEditados.endereco) {
+                dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua || state.enderecoInput });
+                dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua || state.endereco });
+            }
+
+            if (!camposEditados.cep) {
+                dispatch({ type: 'UPDATE_FIELD', field: 'cep', value: endereco.cep || state.cep });
+            }
+
+            if (!isNumeroManual && !camposEditados.numero) {
                 dispatch({ type: 'UPDATE_FIELD', field: 'numero', value: endereco.numero || state.numero });
             }
 
-            if (endereco.bairro && !state.localizacao) {
+            if (endereco.bairro && !state.localizacao && !camposEditados.localizacao) {
                 dispatch({ type: 'UPDATE_FIELD', field: 'localizacao', value: endereco.bairro });
             }
         }
-    }, [endereco, isNumeroManual, enderecoEditado]);
-
+    }, [endereco, isNumeroManual, camposEditados]);
 
     // Busca postes cadastrados - Versão otimizada
     const fetchPostesCadastrados = async () => {
@@ -629,10 +644,20 @@ function Cadastro() {
         }
     }, [postesCadastrados, addPostMarkers]);
 
-    const handleEnderecoChange = (e) => {
-        setEnderecoEditado(true); // Marca que o usuário editou manualmente
-        dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: e.target.value });
-        dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: e.target.value });
+
+
+
+
+    // Função para lidar com edições manuais
+    const handleCampoEditado = (field) => {
+        setCamposEditados(prev => ({ ...prev, [field]: true }));
+    };
+
+    // Função para restaurar automaticamente se o campo não foi editado manualmente
+    const handleRestaurarAutomatico = (field, value) => {
+        if (!camposEditados[field]) {
+            dispatch({ type: 'UPDATE_FIELD', field, value });
+        }
     };
 
 
@@ -1278,74 +1303,168 @@ function Cadastro() {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Cidade</label>
-                            <input
-                                type="text"
-                                value={state.cidade}
-                                onChange={(e) => handleFieldChange('cidade', e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
+                        <div className="space-y-4">
+                            {/* Campo Cidade */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700">Cidade</label>
+                                <input
+                                    type="text"
+                                    value={state.cidade}
+                                    onChange={(e) => {
+                                        handleFieldChange('cidade', e.target.value);
+                                        setCamposEditados(prev => ({ ...prev, cidade: true }));
+                                    }}
+                                    onBlur={() => endereco && !camposEditados.cidade && handleFieldChange('cidade', endereco.cidade)}
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                {camposEditados.cidade && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCamposEditados(prev => ({ ...prev, cidade: false }));
+                                            if (endereco) {
+                                                handleFieldChange('cidade', endereco.cidade);
+                                            }
+                                        }}
+                                        className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                        Restaurar
+                                    </button>
+                                )}
+                            </div>
 
-                        <div className="relative">
-                            <input
-                                type="text"
-                                value={state.enderecoInput || ""}
-                                onChange={handleEnderecoChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                            />
-                            {enderecoEditado && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setEnderecoEditado(false);
-                                        // Disparar o preenchimento automático novamente
-                                        if (endereco) {
-                                            dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua });
-                                            dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua });
+                            {/* Campo Endereço */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700">Endereço</label>
+                                <input
+                                    type="text"
+                                    value={state.enderecoInput || ""}
+                                    onChange={(e) => {
+                                        // Verifica se handleEnderecoChange existe antes de chamar
+                                        if (typeof handleEnderecoChange === 'function') {
+                                            handleEnderecoChange(e);
+                                        } else {
+                                            // Fallback básico caso a função não exista
+                                            handleFieldChange('enderecoInput', e.target.value);
+                                        }
+                                        setCamposEditados(prev => ({ ...prev, endereco: true }));
+                                    }}
+                                    onBlur={() => {
+                                        // Verificação segura do objeto endereco
+                                        if (endereco?.rua && !camposEditados.endereco) {
+                                            handleFieldChange('enderecoInput', endereco.rua);
                                         }
                                     }}
-                                    className="absolute right-2 top-2 text-xs text-blue-500 hover:text-blue-700"
-                                >
-                                    Restaurar automático
-                                </button>
-                            )}
-                        </div>
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Número</label>
-                            <input
-                                type="text"
-                                value={state.numero}
-                                onChange={(e) => {
-                                    handleFieldChange('numero', e.target.value);
-                                    setIsNumeroManual(true);
-                                }}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
+                                {camposEditados.endereco && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCamposEditados(prev => ({ ...prev, endereco: false }));
+                                            // Verificação segura do objeto endereco
+                                            if (endereco?.rua) {
+                                                handleFieldChange('enderecoInput', endereco.rua);
+                                                handleFieldChange('endereco', endereco.rua);
+                                            }
+                                        }}
+                                        className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                        Restaurar
+                                    </button>
+                                )}
+                            </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">CEP</label>
-                            <input
-                                type="text"
-                                value={state.cep}
-                                onChange={(e) => handleFieldChange('cep', e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
+                            {/* Campo Número */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700">Número</label>
+                                <input
+                                    type="text"
+                                    value={state.numero}
+                                    onChange={(e) => {
+                                        handleFieldChange('numero', e.target.value);
+                                        setIsNumeroManual(true);
+                                        setCamposEditados(prev => ({ ...prev, numero: true }));
+                                    }}
+                                    onBlur={() => endereco && !isNumeroManual && !camposEditados.numero && handleFieldChange('numero', endereco.numero)}
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                {(camposEditados.numero || isNumeroManual) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCamposEditados(prev => ({ ...prev, numero: false }));
+                                            setIsNumeroManual(false);
+                                            if (endereco) {
+                                                handleFieldChange('numero', endereco.numero);
+                                            }
+                                        }}
+                                        className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                        Restaurar
+                                    </button>
+                                )}
+                            </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">BAIRRO</label>
-                            <input
-                                type="text"
-                                value={state.localizacao}
-                                onChange={(e) => handleFieldChange('localizacao', e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
+                            {/* Campo CEP */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700">CEP</label>
+                                <input
+                                    type="text"
+                                    value={state.cep}
+                                    onChange={(e) => {
+                                        handleFieldChange('cep', e.target.value);
+                                        setCamposEditados(prev => ({ ...prev, cep: true }));
+                                    }}
+                                    onBlur={() => endereco && !camposEditados.cep && handleFieldChange('cep', endereco.cep)}
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                {camposEditados.cep && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCamposEditados(prev => ({ ...prev, cep: false }));
+                                            if (endereco) {
+                                                handleFieldChange('cep', endereco.cep);
+                                            }
+                                        }}
+                                        className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                        Restaurar
+                                    </button>
+                                )}
+                            </div>
 
+                            {/* Campo Bairro */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700">BAIRRO</label>
+                                <input
+                                    type="text"
+                                    value={state.localizacao}
+                                    onChange={(e) => {
+                                        handleFieldChange('localizacao', e.target.value);
+                                        setCamposEditados(prev => ({ ...prev, localizacao: true }));
+                                    }}
+                                    onBlur={() => endereco?.bairro && !camposEditados.localizacao && handleFieldChange('localizacao', endereco.bairro)}
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                {camposEditados.localizacao && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCamposEditados(prev => ({ ...prev, localizacao: false }));
+                                            if (endereco?.bairro) {
+                                                handleFieldChange('localizacao', endereco.bairro);
+                                            }
+                                        }}
+                                        className="absolute right-2 top-7 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                        Restaurar
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                         <ComboBox
                             label="Selecione:"
                             options={[

@@ -644,10 +644,15 @@ function Cadastro() {
         }
     }, [postesCadastrados, addPostMarkers]);
 
+    const handleEnderecoChange = (e) => {
+        const value = e.target.value;
+        // Atualiza ambos os campos de endereço
+        handleFieldChange('enderecoInput', value);
+        handleFieldChange('endereco', value);
+        setEnderecoEditado(true);
+    };
 
-
-
-
+    
     // Função para lidar com edições manuais
     const handleCampoEditado = (field) => {
         setCamposEditados(prev => ({ ...prev, [field]: true }));

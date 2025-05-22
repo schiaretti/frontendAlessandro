@@ -5,6 +5,9 @@ import {
   FiZap, FiSun, FiCpu, FiLayers, FiTrendingUp, FiGrid
 } from 'react-icons/fi';
 import api from '../../services/api';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 function Relatorios() {
   const [filtros, setFiltros] = useState({
@@ -54,20 +57,16 @@ function Relatorios() {
   const buscarDados = async () => {
     setLoading(true);
     try {
-      // Prepara os parâmetros com tratamento robusto
       const params = Object.fromEntries(
         Object.entries(filtros)
           .filter(([_, v]) => v !== '' && v !== null && v !== undefined)
           .map(([k, v]) => {
-            // Tratamento para campos booleanos
             if (['transformador', 'concentrador', 'telecom', 'medicao'].includes(k)) {
               if (v === true || v === 'true') return [k, "true"];
               if (v === false || v === 'false') return [k, "false"];
               return [k, undefined];
             }
-
-            // Converte strings numéricas para número
-            if (typeof v === 'string' && !isNaN(v) && v.trim() !== '') {
+             if (typeof v === 'string' && !isNaN(v) && v.trim() !== '') {
               const numValue = v.includes('.') ? parseFloat(v) : parseInt(v);
               return [k, isNaN(numValue) ? v : numValue];
             }
@@ -77,7 +76,8 @@ function Relatorios() {
           .filter(([_, v]) => v !== undefined)
       );
 
-      // Validação de faixas numéricas
+     
+
       const validarFaixasNumericas = () => {
         const campos = [
           { min: 'alturaposteMin', max: 'alturaposteMax' },
@@ -114,8 +114,8 @@ function Relatorios() {
         },
         timeout: 30000
       });
+      console.log('Resposta da API:', response.data);
 
-      // Garante estrutura consistente dos dados
       const responseData = response.data || {};
       const formattedData = {
         data: Array.isArray(responseData.data) ? responseData.data : [],
@@ -133,7 +133,6 @@ function Relatorios() {
       mostrarNotificacao('Relatório gerado com sucesso!', 'sucesso');
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
-
       let errorMessage = 'Erro ao gerar relatório';
       if (error.code === 'ECONNABORTED') {
         errorMessage = 'Tempo de requisição excedido';
@@ -154,7 +153,146 @@ function Relatorios() {
     }
   };
 
-  // Componentes reutilizáveis
+  const exportToExcel = () => {
+    if (resultados.data.length === 0) {
+      mostrarNotificacao('Nenhum dado para exportar', 'erro');
+      return;
+    }
+
+    try {
+      const dadosParaExportar = resultados.data.map(poste => ({
+        'N° Poste': poste.numeroIdentificacao || '-',
+        'Endereço': poste.endereco || '-',
+        'Número': poste.numero || '-',
+        'Cidade': poste.cidade || '-',
+        'Latitude': poste.latitude || '-',
+        'Longitude': poste.longitude || '-',
+        'Transformador': poste.transformador ? 'Sim' : 'Não',
+        'Concentrador': poste.concentrador ? 'Sim' : 'Não',
+        'Lâmpada': poste.tipoLampada || '-',
+        'Potência (W)': poste.potenciaLampada || '-',
+        'Altura (m)': poste.alturaposte || '-',
+        'Estrutura': poste.estruturaposte || '-',
+        'Tipo de Braço': poste.tipoBraco || '-',
+        'Tamanho Braço (m)': poste.tamanhoBraco || '-',
+        'Qtd. Pontos': poste.quantidadePontos || '-',
+        'Tipo Reator': poste.tipoReator || '-',
+        'Tipo Comando': poste.tipoComando || '-',
+        'Tipo Rede': poste.tipoRede || '-',
+        'Tipo Cabo': poste.tipoCabo || '-',
+        'N° Fases': poste.numeroFases || '-',
+        'Tipo Via': poste.tipoVia || '-',
+        'Hierarquia Via': poste.hierarquiaVia || '-',
+        'Tipo Pavimento': poste.tipoPavimento || '-',
+        'Qtd. Faixas': poste.quantidadeFaixas || '-',
+        'Tipo Passeio': poste.tipoPasseio || '-',
+        'Canteiro Central': poste.canteiroCentral ? 'Sim' : 'Não',
+        'Largura Canteiro (m)': poste.larguraCanteiro || '-',
+        'Finalidade': poste.finalidadeInstalacao || '-'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dadosParaExportar);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatorio_Postes');
+
+      const date = new Date();
+      const fileName = `Relatorio_Postes_${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      mostrarNotificacao('Exportação para Excel concluída!', 'sucesso');
+    } catch (error) {
+      console.error('Erro ao exportar para Excel:', error);
+      mostrarNotificacao('Erro ao exportar para Excel', 'erro');
+    }
+  };
+
+  const exportToPDF = () => {
+    if (resultados.data.length === 0) {
+      mostrarNotificacao('Nenhum dado para exportar', 'erro');
+      return;
+    }
+
+    try {
+      // Criar novo documento PDF
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm'
+      });
+
+      // Configurações do documento
+      const title = 'Relatório de Postes';
+      const date = new Date();
+      const dateStr = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+      // Adicionar cabeçalho
+      doc.setFontSize(16);
+      doc.text(title, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Gerado em: ${dateStr}`, 14, 22);
+      doc.text(`Total de postes: ${resultados.meta.total}`, 14, 28);
+
+      // Preparar dados para a tabela
+      const columns = [
+        { title: 'N° Poste', dataKey: 'numeroIdentificacao' },
+        { title: 'Endereço', dataKey: 'endereco' },
+        { title: 'Cidade', dataKey: 'cidade' },
+        { title: 'Transformador', dataKey: 'transformador' },
+        { title: 'Lâmpada', dataKey: 'tipoLampada' },
+        { title: 'Potência (W)', dataKey: 'potenciaLampada' },
+        { title: 'Altura (m)', dataKey: 'alturaposte' },
+        { title: 'Tipo Rede', dataKey: 'tipoRede' }
+      ];
+
+      const rows = resultados.data.map(poste => ({
+        numeroIdentificacao: poste.numeroIdentificacao || '-',
+        endereco: poste.endereco || '-',
+        cidade: poste.cidade || '-',
+        transformador: poste.transformador ? 'Sim' : 'Não',
+        tipoLampada: poste.tipoLampada || '-',
+        potenciaLampada: poste.potenciaLampada || '-',
+        alturaposte: poste.alturaposte ? `${poste.alturaposte}m` : '-',
+        tipoRede: poste.tipoRede || '-'
+      }));
+
+      // Adicionar tabela ao PDF
+      autoTable(doc, {
+        head: [columns.map(col => col.title)],
+        body: rows.map(row => columns.map(col => row[col.dataKey])),
+        startY: 35,
+        margin: { left: 14 },
+        styles: {
+          fontSize: 8,
+          cellPadding: 1,
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245]
+        }
+      });
+
+      // Adicionar número de páginas
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
+      }
+
+      // Salvar PDF
+      doc.save(`Relatorio_Postes_${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}.pdf`);
+
+      mostrarNotificacao('Exportação para PDF concluída!', 'sucesso');
+    } catch (error) {
+      console.error('Erro ao exportar para PDF:', error);
+      mostrarNotificacao('Erro ao exportar para PDF', 'erro');
+    }
+  };
+
   const RangeInput = ({ label, minField, maxField, unit = '', icon }) => (
     <div className="space-y-1">
       <label className="block text-sm font-medium text-gray-700 items-center gap-1">
@@ -237,7 +375,6 @@ function Relatorios() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      {/* Notificação */}
       {notificacao.mostrar && (
         <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl flex items-center space-x-2
           ${notificacao.tipo === 'sucesso' ? 'bg-green-500' : 'bg-red-500'} text-white animate-fade-in`}>
@@ -251,7 +388,6 @@ function Relatorios() {
         Relatórios de Postes
       </h1>
 
-      {/* Seletor de Tipo de Relatório */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border">
         <label className="block mb-2 font-medium text-gray-700">Tipo de Relatório</label>
         <div className="flex flex-col md:flex-row gap-4">
@@ -275,7 +411,6 @@ function Relatorios() {
         </div>
       </div>
 
-      {/* Filtros Básicos */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-white rounded-lg shadow-sm border">
         <div>
           <label className="block mb-1 font-medium text-gray-700 items-center gap-1">
@@ -313,7 +448,6 @@ function Relatorios() {
         </div>
       </div>
 
-      {/* Coordenadas Geográficas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-white rounded-lg shadow-sm border">
         <div>
           <label className="block mb-1 font-medium text-gray-700">Latitude</label>
@@ -339,10 +473,8 @@ function Relatorios() {
         </div>
       </div>
 
-      {/* Filtros Avançados */}
       {mostrarFiltrosAvancados && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-white rounded-lg shadow-sm border">
-          {/* Componentes Elétricos */}
           <div className="space-y-3">
             <h3 className="font-medium border-b pb-1 flex items-center gap-2 text-gray-700">
               <FiZap className="text-yellow-500" />
@@ -354,7 +486,6 @@ function Relatorios() {
             <BooleanSelect field="medicao" label="Medição" icon={<FiCpu />} />
           </div>
 
-          {/* Iluminação */}
           <div className="space-y-3">
             <h3 className="font-medium border-b pb-1 flex items-center gap-2 text-gray-700">
               <FiSun className="text-amber-500" />
@@ -365,9 +496,11 @@ function Relatorios() {
               label="Tipo de Lâmpada"
               icon={<FiSun />}
               options={[
-                { value: "LED", label: "LED" },
-                { value: "Vapor de Sódio", label: "Vapor de Sódio" },
-                { value: "Luminária LED", label: "Luminária LED" }
+                { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
+                { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
+                { value: "Mista", label: "Mista" },
+                { value: "Led", label: "Led" },
+                { value: "Desconhecida", label: "Desconhecida" },
               ]}
             />
             <RangeInput
@@ -381,13 +514,22 @@ function Relatorios() {
               label="Tipo de Reator"
               icon={<FiLayers />}
               options={[
-                { value: "Eletrônico", label: "Eletrônico" },
-                { value: "Eletromagnético", label: "Eletromagnético" }
+                { value: "Reator Externo", label: "Reator Externo" },
+                { value: "Reator Integrado", label: "Reator Integrado" },
+                { value: "Módulo", label: "Módulo" },
+              ]}
+            />
+            <SelectInput
+              field="tipoComando"
+              label="Tipo de Comando"
+              icon={<FiLayers />}
+              options={[
+                { value: "Individual", label: "Individual" },
+                { value: "Coletivo", label: "Coletivo" },
               ]}
             />
           </div>
 
-          {/* Características Físicas */}
           <div className="space-y-3">
             <h3 className="font-medium border-b pb-1 flex items-center gap-2 text-gray-700">
               <FiLayers className="text-gray-500" />
@@ -412,16 +554,20 @@ function Relatorios() {
               label="Tipo de Braço"
               icon={<FiLayers />}
               options={[
-                { value: "Reto", label: "Reto" },
-                { value: "Curvo", label: "Curvo" },
-                { value: "Duplo", label: "Duplo" }
+                { value: "Braço Curto", label: "Braço Curto" },
+                { value: "Braço Médio", label: "Braço Médio" },
+                { value: "Braço Longo", label: "Braço Longo" },
+                { value: "Level 1", label: "Level 1" },
+                { value: "Level 2", label: "Level 2" },
+                { value: "Suporte com 1", label: "Suporte com 1" },
+                { value: "Suporte com 2", label: "Suporte com 2" },
+                { value: "Suporte com 3", label: "Suporte com 3" },
+                { value: "Suporte com 4", label: "Suporte com 4" },
               ]}
             />
           </div>
 
-          {/* Mais Filtros - Segunda Linha */}
           <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
-            {/* Rede Elétrica */}
             <div className="space-y-3">
               <h3 className="font-medium border-b pb-1 flex items-center gap-2 text-gray-700">
                 <FiZap className="text-yellow-500" />
@@ -432,8 +578,9 @@ function Relatorios() {
                 label="Tipo de Rede"
                 icon={<FiZap />}
                 options={[
-                  { value: "Aérea", label: "Aérea" },
-                  { value: "Subterrânea", label: "Subterrânea" }
+                  { value: "Aérea BT", label: "Aérea BT" },
+                  { value: "Convencional", label: "Convencional" },
+                  { value: "Subterrânea", label: "Subterrânea" },
                 ]}
               />
               <SelectInput
@@ -441,13 +588,13 @@ function Relatorios() {
                 label="Número de Fases"
                 icon={<FiZap />}
                 options={[
-                  { value: "1", label: "Monofásico" },
-                  { value: "3", label: "Trifásico" }
+                  { value: "Monofásico", label: "Monofásico" },
+                  { value: "Bifásico", label: "Bifásico" },
+                  { value: "Trifásico", label: "Trifásico" },
                 ]}
               />
             </div>
 
-            {/* Infraestrutura */}
             <div className="space-y-3">
               <h3 className="font-medium border-b pb-1 flex items-center gap-2 text-gray-700">
                 <FiMapPin className="text-blue-500" />
@@ -458,9 +605,11 @@ function Relatorios() {
                 label="Tipo de Via"
                 icon={<FiMapPin />}
                 options={[
-                  { value: "Urbana", label: "Urbana" },
-                  { value: "Rural", label: "Rural" },
-                  { value: "Rodovia", label: "Rodovia" }
+                  { value: "Via Rápida", label: "Via Rápida" },
+                  { value: "Via Local", label: "Via Local" },
+                  { value: "Via Arterial", label: "Via Arterial" },
+                  { value: "Via Coletora", label: "Via Coletora" },
+                  { value: "Via Rural", label: "Via Rural" },
                 ]}
               />
               <BooleanSelect
@@ -468,12 +617,24 @@ function Relatorios() {
                 label="Canteiro Central"
                 icon={<FiMapPin />}
               />
+              <SelectInput
+                field="finalidadeInstalacao"
+                label="Finalidade da Instalação"
+                icon={<FiMapPin />}
+                options={[
+                  { value: "Viária", label: "Viária" },
+                  { value: "Cemitério", label: "Cemitério" },
+                  { value: "Praça", label: "Praça" },
+                  { value: "Espaço municipal", label: "Espaço municipal" },
+                  { value: "Ciclo via", label: "Ciclo via" },
+                  { value: "Pista de caminhada", label: "Pista de caminhada" },
+                ]}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* Botão de Busca */}
       <div className="flex justify-center mb-8">
         <button
           onClick={buscarDados}
@@ -497,7 +658,6 @@ function Relatorios() {
         </button>
       </div>
 
-      {/* Resultados */}
       {resultados.meta && (
         <div className="mt-8">
           {filtros.tipoRelatorio === 'estatisticas' ? (
@@ -525,10 +685,22 @@ function Relatorios() {
                     {resultados.meta.total} Postes Encontrados
                   </h2>
                 </div>
-                <button className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium bg-blue-50 px-3 py-1 rounded-md">
-                  <FiDownload />
-                  Exportar para Excel
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={exportToExcel}
+                    className="flex items-center gap-1 text-green-600 hover:text-green-800 text-sm font-medium bg-green-50 px-3 py-1 rounded-md"
+                  >
+                    <FiDownload />
+                    Exportar para Excel
+                  </button>
+                  <button
+                    onClick={exportToPDF}
+                    className="flex items-center gap-1 text-red-600 hover:text-red-800 text-sm font-medium bg-red-50 px-3 py-1 rounded-md"
+                  >
+                    <FiDownload />
+                    Exportar para PDF
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -721,7 +893,6 @@ function Relatorios() {
                 </table>
               </div>
 
-              {/* Paginação */}
               {resultados.meta.total > paginacao.itensPorPagina && (
                 <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
                   <div>

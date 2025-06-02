@@ -39,7 +39,9 @@ function useGetLocation(isLastPost) {
 
             setState(prev => ({ ...prev, isLoading: true }));
 
-            const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+            const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 
+                        process.env.VITE_MAPBOX_TOKEN ||
+                        "pk.eyJ1Ijoicm9uaXZhbGRvIiwiYSI6ImNtYmY3NzFtdzJoYjgycG9kMjhkdmpnNTUifQ.bJjRCA6kUFEokgYSDxR2iA";
               if (!MAPBOX_TOKEN) {
             throw new Error("Mapbox token não configurado");
         }
@@ -58,18 +60,25 @@ function useGetLocation(isLastPost) {
                 throw new Error("Nenhum endereço encontrado");
             }
 
-            const features = data.features[0]?.properties || {};
-            const context = data.features[0]?.context || [];
-
-            const enderecoData = {
-                rua: features.address || "Rua não encontrada",
-                cidade: context.find(c => c.id.includes("place"))?.text || "Cidade não encontrada",
-                estado: context.find(c => c.id.includes("region"))?.text || null,
-                cep: context.find(c => c.id.includes("postcode"))?.text || null,
-                numero: features.address_number || null,
-                bairro: context.find(c => c.id.includes("neighborhood"))?.text || null,
-                completo: data.features[0]?.place_name || null,
-            };
+         // Extração melhorada dos dados
+        const feature = data.features[0];
+        const context = feature.context || [];
+       // Mapeamento mais robusto dos campos
+        const enderecoData = {
+            rua: feature.text || feature.properties?.address || "Rua não encontrada",
+            cidade: context.find(c => c.id.includes("place"))?.text || 
+                   context.find(c => c.id.includes("locality"))?.text || 
+                   "Cidade não encontrada",
+            estado: context.find(c => c.id.includes("region"))?.text || null,
+            cep: context.find(c => c.id.includes("postcode"))?.text || null,
+            bairro: context.find(c => c.id.includes("neighborhood"))?.text || 
+                   context.find(c => c.id.includes("sublocality"))?.text || 
+                   "Bairro não encontrado",
+            numero: feature.properties?.address_number || null,
+            completo: feature.place_name || null,
+            
+        };
+         
 
             // Armazena no cache
             sessionStorage.setItem(cacheKey, JSON.stringify(enderecoData));
@@ -80,6 +89,7 @@ function useGetLocation(isLastPost) {
                 isLoading: false,
                 error: null
             }));
+          
 
         } catch (err) {
             console.error("Erro ao buscar endereço:", err);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from "react";
-import useGetLocation from "../../hooks/useGetLocation.jsx";
+import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";
@@ -1289,6 +1289,7 @@ function Cadastro() {
                         </div>
 
                         <div className="relative">
+                               <label className="block text-sm font-medium text-gray-700">Endereço</label>
                             <input
                                 type="text"
                                 value={state.enderecoInput || ""}
@@ -1327,7 +1328,7 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">CEP</label>
+                            <label className="block text-sm font-medium text-gray-700">Cep</label>
                             <input
                                 type="text"
                                 value={state.cep}
@@ -1337,7 +1338,7 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">BAIRRO</label>
+                            <label className="block text-sm font-medium text-gray-700">Bairro</label>
                             <input
                                 type="text"
                                 value={state.localizacao}

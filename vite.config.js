@@ -32,8 +32,8 @@ export default defineConfig(({ mode }) => {
     ],
     // Configuração importante para o Vercel
     define: {
-      'process.env': process.env,
-      'import.meta.env.VITE_MAPBOX_TOKEN': JSON.stringify(env.VITE_MAPBOX_TOKEN),
+    'process.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
+    'import.meta.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
     },
   };
 });

@@ -214,7 +214,7 @@ function Cadastro() {
         return a.length === b.length && a.every((val, index) => val === b[index]);
     }, []);
 
-    // Preenche campos do endereço automaticamente
+ 
     useEffect(() => {
         if (endereco && !enderecoEditado) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
@@ -226,11 +226,12 @@ function Cadastro() {
                 dispatch({ type: 'UPDATE_FIELD', field: 'numero', value: endereco.numero || state.numero });
             }
 
-            if (endereco.bairro && !state.localizacao) {
+            if (endereco.bairro) { // Só atualiza se bairro não for null
                 dispatch({ type: 'UPDATE_FIELD', field: 'localizacao', value: endereco.bairro });
             }
         }
     }, [endereco, isNumeroManual, enderecoEditado]);
+
 
 
     // Busca postes cadastrados - Versão otimizada
@@ -1289,7 +1290,7 @@ function Cadastro() {
                         </div>
 
                         <div className="relative">
-                               <label className="block text-sm font-medium text-gray-700">Endereço</label>
+                            <label className="block text-sm font-medium text-gray-700">Endereço</label>
                             <input
                                 type="text"
                                 value={state.enderecoInput || ""}
@@ -1345,7 +1346,7 @@ function Cadastro() {
                                 onChange={(e) => handleFieldChange('localizacao', e.target.value)}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                             
+
                         </div>
 
                         <ComboBox

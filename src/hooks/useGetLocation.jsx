@@ -27,7 +27,7 @@ function useGetLocation(isLastPost) {
             // Verifica cache
             const cacheKey = `geocode_${lat.toFixed(4)}_${lon.toFixed(4)}`;
             const cachedData = sessionStorage.getItem(cacheKey);
-            
+
             if (cachedData) {
                 setState(prev => ({
                     ...prev,
@@ -39,12 +39,12 @@ function useGetLocation(isLastPost) {
 
             setState(prev => ({ ...prev, isLoading: true }));
 
-            const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 
-                        process.env.VITE_MAPBOX_TOKEN ||
-                        "pk.eyJ1Ijoicm9uaXZhbGRvIiwiYSI6ImNtYmY3NzFtdzJoYjgycG9kMjhkdmpnNTUifQ.bJjRCA6kUFEokgYSDxR2iA";
-              if (!MAPBOX_TOKEN) {
-            throw new Error("Mapbox token não configurado");
-        }
+            const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ||
+                process.env.VITE_MAPBOX_TOKEN ||
+                "pk.eyJ1Ijoicm9uaXZhbGRvIiwiYSI6ImNtYmY3NzFtdzJoYjgycG9kMjhkdmpnNTUifQ.bJjRCA6kUFEokgYSDxR2iA";
+            if (!MAPBOX_TOKEN) {
+                throw new Error("Mapbox token não configurado");
+            }
             console.log("Token carregado:", MAPBOX_TOKEN); // Debug aqui
             const response = await fetch(
                 `https://api.mapbox.com/geocoding/v5/mapbox.places/${lon},${lat}.json?types=address&language=pt&access_token=${MAPBOX_TOKEN}`
@@ -60,25 +60,26 @@ function useGetLocation(isLastPost) {
                 throw new Error("Nenhum endereço encontrado");
             }
 
-         // Extração melhorada dos dados
-        const feature = data.features[0];
-        const context = feature.context || [];
-       // Mapeamento mais robusto dos campos
-        const enderecoData = {
-            rua: feature.text || feature.properties?.address || "Rua não encontrada",
-            cidade: context.find(c => c.id.includes("place"))?.text || 
-                   context.find(c => c.id.includes("locality"))?.text || 
-                   "Cidade não encontrada",
-            estado: context.find(c => c.id.includes("region"))?.text || null,
-            cep: context.find(c => c.id.includes("postcode"))?.text || null,
-            bairro: context.find(c => c.id.includes("neighborhood"))?.text || 
-                   context.find(c => c.id.includes("sublocality"))?.text || 
-                   "Bairro não encontrado",
-            numero: feature.properties?.address_number || null,
-            completo: feature.place_name || null,
-            
-        };
-         
+            // Extração melhorada dos dados
+            const feature = data.features[0];
+            const context = feature.context || [];
+            // Mapeamento mais robusto dos campos
+            const enderecoData = {
+                rua: feature.text || feature.properties?.address || "Rua não encontrada",
+                cidade: context.find(c => c.id.includes("place"))?.text ||
+                    context.find(c => c.id.includes("locality"))?.text ||
+                    "Cidade não encontrada",
+                estado: context.find(c => c.id.includes("region"))?.text || null,
+                cep: context.find(c => c.id.includes("postcode"))?.text || null,
+                bairro: feature.properties?.address?.match(/(\b\w+\b)(?=\s*,\s*Uberaba)/i)?.[0] ||  // Tenta extrair do address
+                    context.find(c => c.id.includes("neighborhood"))?.text ||
+                    context.find(c => c.id.includes("sublocality"))?.text ||
+                    null,  // Mude para null em vez de "Bairro não encontrado"
+                numero: feature.properties?.address_number || null,
+                completo: feature.place_name || null,
+
+            };
+
 
             // Armazena no cache
             sessionStorage.setItem(cacheKey, JSON.stringify(enderecoData));
@@ -89,7 +90,7 @@ function useGetLocation(isLastPost) {
                 isLoading: false,
                 error: null
             }));
-          
+
 
         } catch (err) {
             console.error("Erro ao buscar endereço:", err);

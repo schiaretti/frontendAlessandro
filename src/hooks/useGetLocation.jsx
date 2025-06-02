@@ -1,12 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 
-/**
- * Hook customizado para obtenção de geolocalização e endereço
- * @param {boolean} isLastPost - Indica se é o último poste (usa coordenadas mockadas)
- * @returns {object} - Retorna coordenadas, endereço, precisão e erros
- */
 function useGetLocation(isLastPost) {
-    // Estados melhor organizados
     const [state, setState] = useState({
         coords: null,
         endereco: null,
@@ -16,69 +10,84 @@ function useGetLocation(isLastPost) {
     });
 
     const watchIdRef = useRef(null);
+    const lastRequestTime = useRef(0);
 
-    // Coordenadas mockadas centralizadas
+    // Coordenadas mockadas
     const MOCK_COORDS = [-23.5505, -46.6333];
     const MOCK_ACCURACY = 10;
 
-    /**
-     * Busca endereço reverso na API Nominatim
-     * @param {number} lat - Latitude
-     * @param {number} lon - Longitude
-     */
     const buscarEndereco = async (lat, lon) => {
         try {
-            setState(prev => ({ ...prev, isLoading: true }));
-            
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 10000);
+            // Controle de rate limiting
+            const now = Date.now();
+            const delay = Math.max(0, 500 - (now - lastRequestTime.current));
+            await new Promise(resolve => setTimeout(resolve, delay));
+            lastRequestTime.current = Date.now();
 
+            // Verifica cache
+            const cacheKey = `geocode_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
+            
+            if (cachedData) {
+                setState(prev => ({
+                    ...prev,
+                    endereco: JSON.parse(cachedData),
+                    isLoading: false
+                }));
+                return;
+            }
+
+            setState(prev => ({ ...prev, isLoading: true }));
+
+            const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`,
-                { signal: controller.signal }
+                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lon},${lat}.json?types=address&language=pt&access_token=${MAPBOX_TOKEN}`
             );
 
-            clearTimeout(timeout);
-
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`Erro HTTP: ${response.status}`);
             }
 
             const data = await response.json();
 
+            if (!data.features || data.features.length === 0) {
+                throw new Error("Nenhum endereço encontrado");
+            }
+
+            const features = data.features[0]?.properties || {};
+            const context = data.features[0]?.context || [];
+
+            const enderecoData = {
+                rua: features.address || "Rua não encontrada",
+                cidade: context.find(c => c.id.includes("place"))?.text || "Cidade não encontrada",
+                estado: context.find(c => c.id.includes("region"))?.text || null,
+                cep: context.find(c => c.id.includes("postcode"))?.text || null,
+                numero: features.address_number || null,
+                bairro: context.find(c => c.id.includes("neighborhood"))?.text || null,
+                completo: data.features[0]?.place_name || null,
+            };
+
+            // Armazena no cache
+            sessionStorage.setItem(cacheKey, JSON.stringify(enderecoData));
+
             setState(prev => ({
                 ...prev,
-                endereco: {
-                    rua: data.address?.road || "Rua desconhecida",
-                    cidade: data.address?.city || 
-                           data.address?.town || 
-                           data.address?.village || 
-                           "Cidade desconhecida",
-                    cep: data.address?.postcode || "CEP não disponível",
-                    numero: data.address?.house_number || "",
-                    bairro: data.address?.suburb || 
-                           data.address?.neighbourhood || 
-                           null,
-                },
-                isLoading: false
+                endereco: enderecoData,
+                isLoading: false,
+                error: null
             }));
 
         } catch (err) {
             console.error("Erro ao buscar endereço:", err);
             setState(prev => ({
                 ...prev,
-                endereco: {
-                    rua: "Erro ao buscar endereço",
-                    cidade: "Erro",
-                    cep: "Erro",
-                    numero: "",
-                    bairro: null
-                },
-                error: "Não foi possível obter o endereço",
-                isLoading: false
+                error: err.message,
+                isLoading: false,
+                endereco: null
             }));
         }
     };
+
 
     useEffect(() => {
         const obterLocalizacao = async () => {
@@ -124,7 +133,7 @@ function useGetLocation(isLastPost) {
                     },
                     (err) => {
                         let errorMsg = "Erro na geolocalização";
-                        
+
                         if (err.code === err.PERMISSION_DENIED) {
                             errorMsg = "Permissão de localização negada";
                         } else if (err.code === err.TIMEOUT) {
@@ -160,10 +169,10 @@ function useGetLocation(isLastPost) {
         };
     }, [isLastPost]);
 
-    return { 
-        coords: state.coords, 
-        endereco: state.endereco, 
-        accuracy: state.accuracy, 
+    return {
+        coords: state.coords,
+        endereco: state.endereco,
+        accuracy: state.accuracy,
         error: state.error,
         isLoading: state.isLoading
     };

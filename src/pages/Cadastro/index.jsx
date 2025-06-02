@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from "react";
-import useGetLocation from "../../hooks/useGetLocation";
+import useGetLocation from "../../hooks/useGetLocation.jsx";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
 import ComboBox from "../../components/ComboBox.jsx";

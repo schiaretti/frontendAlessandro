@@ -27,16 +27,28 @@ const DashboardHome = () => {
     }
   };
 
+  // Primeiro, crie uma função para buscar a contagem de usuários (similar à fetchPostesCount)
+const fetchUsuariosCount = async () => {
+  try {
+    const response = await api.get('/count-usuarios');
+    return response.data.count;
+  } catch (error) {
+    console.error('Erro ao buscar usuários:', error);
+    throw error;
+  }
+};
+
   const fetchDashboardData = async () => {
     try {
       setDashboardData(prev => ({ ...prev, loading: true, error: null }));
       
       // Aqui você pode adicionar as outras chamadas para usuários e cidades
       const postesCount = await fetchPostesCount();
+      const usuariosCount = await fetchUsuariosCount();
 
       setDashboardData({
         postes: postesCount,
-        usuarios: 0, // Substitua por chamada real
+        usuarios: usuariosCount, // Substitua por chamada real
         cidades: 0,  // Substitua por chamada real
         loading: false,
         error: null

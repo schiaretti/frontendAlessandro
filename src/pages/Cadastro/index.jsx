@@ -1345,6 +1345,7 @@ function Cadastro() {
                                 onChange={(e) => handleFieldChange('localizacao', e.target.value)}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
+                             
                         </div>
 
                         <ComboBox

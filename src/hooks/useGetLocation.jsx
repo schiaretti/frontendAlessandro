@@ -40,6 +40,10 @@ function useGetLocation(isLastPost) {
             setState(prev => ({ ...prev, isLoading: true }));
 
             const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+              if (!MAPBOX_TOKEN) {
+            throw new Error("Mapbox token não configurado");
+        }
+            console.log("Token carregado:", MAPBOX_TOKEN); // Debug aqui
             const response = await fetch(
                 `https://api.mapbox.com/geocoding/v5/mapbox.places/${lon},${lat}.json?types=address&language=pt&access_token=${MAPBOX_TOKEN}`
             );

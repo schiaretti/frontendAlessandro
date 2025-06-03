@@ -12,6 +12,7 @@
   "dependencies": {
     "autoprefixer": "^10.4.21",
     "axios": "^1.8.4",
+    "crypto-browserify": "^3.12.1",
     "idb": "^8.0.3",
     "jwt-decode": "^4.0.0",
     "leaflet": "^1.9.4",

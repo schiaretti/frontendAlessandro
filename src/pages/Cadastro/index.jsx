@@ -9,7 +9,7 @@ import axios from 'axios';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { FaTrash } from "react-icons/fa6";
-import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera, FaCheckCircle } from 'react-icons/fa';
+import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import MedidorCamera from "../../components/MedidorCamera.jsx";
 import { salvarCadastroOffline, sincronizarComBackend } from '../../db';
 
@@ -214,7 +214,7 @@ function Cadastro() {
         return a.length === b.length && a.every((val, index) => val === b[index]);
     }, []);
 
- 
+
     useEffect(() => {
         if (endereco && !enderecoEditado) {
             dispatch({ type: 'UPDATE_FIELD', field: 'cidade', value: endereco.cidade || state.cidade });
@@ -1020,6 +1020,8 @@ function Cadastro() {
 
 
     const handleSalvarCadastro = async () => {
+
+
         // 1. Validação dos campos obrigatórios (mantido igual)
         const camposObrigatorios = [
             { campo: 'cidade', nome: 'Cidade' },
@@ -1121,18 +1123,14 @@ function Cadastro() {
                     }
                 });
 
-                // Adiciona fotos
                 fotos.forEach((foto) => {
-                    formularioDados.append('fotos', foto.arquivo);
-                    formularioDados.append('tipos', foto.tipo);
+                    formularioDados.append('fotos', foto.arquivo); // Arquivo
+                    formularioDados.append('tipos', foto.tipo);     // Tipo (usado pelo handleUpload em req.body.tipos)
                     if (foto.tipo === 'ARVORE') {
-                        formularioDados.append('especies', foto.especie);
-                        const coordenadas = foto.coords || userCoords;
-                        formularioDados.append('latitudes', coordenadas[0].toString());
-                        formularioDados.append('longitudes', coordenadas[1].toString());
+                        formularioDados.append('especies', foto.especie); // Especie (usado pelo handleUpload em req.body.especies)
+                        // Não envie latitudes/longitudes aqui, pois não são usadas pelo handleUpload
                     }
                 });
-
                 // Envia para o backend
                 const resposta = await axios.post(
                     'https://backendalesandro-production.up.railway.app/api/postes',
@@ -1141,6 +1139,7 @@ function Cadastro() {
                         headers: {
                             'Content-Type': 'multipart/form-data',
                             'Authorization': `Bearer ${token}`
+
                         }
                     }
                 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from "react";
+import  { useState, useEffect, useRef, useReducer, useCallback, useMemo } from "react";
 import useGetLocation from "../../hooks/useGetLocation";
 import Checkbox from "../../components/checkBox.jsx";
 import BotaoCamera from "../../components/botaoCamera.jsx";
@@ -12,6 +12,8 @@ import { FaTrash } from "react-icons/fa6";
 import { FaSave, FaRecycle, FaCheck, FaTimes, FaCamera, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import MedidorCamera from "../../components/MedidorCamera.jsx";
 import { salvarCadastroOffline, sincronizarComBackend } from '../../db';
+
+
 
 // Tipos de fotos permitidas
 const TIPOS_FOTO = {
@@ -1236,13 +1238,13 @@ function Cadastro() {
                         Cadastro de Postes
                     </h1>
 
-
-
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label htmlFor="numeroIdentificacao" className="block text-sm font-medium text-gray-700 mb-1">
                             Número do Poste
                         </label>
                         <input
+                            id="numeroIdentificacao"
+                            name="numeroIdentificacao"
                             type="text"
                             value={state.numeroIdentificacao || ""}
                             onChange={(e) => handleFieldChange('numeroIdentificacao', e.target.value)}
@@ -1253,14 +1255,13 @@ function Cadastro() {
                         </p>
                     </div>
 
-
-
-
                     {/* Campos de Localização */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Latitude</label>
+                            <label htmlFor="latitude" className="block text-sm font-medium text-gray-700">Latitude</label>
                             <input
+                                id="latitude"
+                                name="latitude"
                                 type="text"
                                 value={userCoords ? userCoords[0] : ""}
                                 readOnly
@@ -1269,8 +1270,10 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Longitude</label>
+                            <label htmlFor="longitude" className="block text-sm font-medium text-gray-700">Longitude</label>
                             <input
+                                id="longitude"
+                                name="longitude"
                                 type="text"
                                 value={userCoords ? userCoords[1] : ""}
                                 readOnly
@@ -1279,8 +1282,10 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Cidade</label>
+                            <label htmlFor="cidade" className="block text-sm font-medium text-gray-700">Cidade</label>
                             <input
+                                id="cidade"
+                                name="cidade"
                                 type="text"
                                 value={state.cidade}
                                 onChange={(e) => handleFieldChange('cidade', e.target.value)}
@@ -1289,8 +1294,10 @@ function Cadastro() {
                         </div>
 
                         <div className="relative">
-                            <label className="block text-sm font-medium text-gray-700">Endereço</label>
+                            <label htmlFor="enderecoInput" className="block text-sm font-medium text-gray-700">Endereço</label>
                             <input
+                                id="enderecoInput"
+                                name="enderecoInput"
                                 type="text"
                                 value={state.enderecoInput || ""}
                                 onChange={handleEnderecoChange}
@@ -1301,7 +1308,6 @@ function Cadastro() {
                                     type="button"
                                     onClick={() => {
                                         setEnderecoEditado(false);
-                                        // Disparar o preenchimento automático novamente
                                         if (endereco) {
                                             dispatch({ type: 'UPDATE_FIELD', field: 'enderecoInput', value: endereco.rua });
                                             dispatch({ type: 'UPDATE_FIELD', field: 'endereco', value: endereco.rua });
@@ -1315,8 +1321,10 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Número</label>
+                            <label htmlFor="numero" className="block text-sm font-medium text-gray-700">Número</label>
                             <input
+                                id="numero"
+                                name="numero"
                                 type="text"
                                 value={state.numero}
                                 onChange={(e) => {
@@ -1328,8 +1336,10 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Cep</label>
+                            <label htmlFor="cep" className="block text-sm font-medium text-gray-700">Cep</label>
                             <input
+                                id="cep"
+                                name="cep"
                                 type="text"
                                 value={state.cep}
                                 onChange={(e) => handleFieldChange('cep', e.target.value)}
@@ -1338,18 +1348,24 @@ function Cadastro() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Bairro</label>
+                            <label htmlFor="localizacao" className="block text-sm font-medium text-gray-700">Bairro</label>
                             <input
+                                id="localizacao"
+                                name="localizacao"
                                 type="text"
                                 value={state.localizacao}
                                 onChange={(e) => handleFieldChange('localizacao', e.target.value)}
                                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-
                         </div>
 
                         <ComboBox
                             label="Selecione:"
+                            name="emFrente"
+                            id="emFrente-field"
+                            className="w-full"
+                            value={state.emFrente || ""}
+                            autoComplete="off"
                             options={[
                                 { value: "Em frente", label: "Em frente" },
                                 { value: "Sem número", label: "Sem número" },
@@ -1360,10 +1376,9 @@ function Cadastro() {
                     </div>
 
                     {/* Seção de Fotos */}
-                    <div className="space-y-4"> {/* Adiciona espaçamento consistente entre as seções */}
-
+                    <div className="space-y-4">
                         {/* Foto Panorâmica */}
-                        <div className="bg-gray-50 rounded-lg overflow-hidden"> {/* Remove borda e padding interno */}
+                        <div className="bg-gray-50 rounded-lg overflow-hidden">
                             <div className="p-4">
                                 <BotaoCamera
                                     id="foto-panoramica"
@@ -1381,7 +1396,7 @@ function Cadastro() {
                                     )}
                                 </p>
                             </div>
-                            <div className="border-t border-gray-200 h-[3px]"></div> {/* Substitui o hr */}
+                            <div className="border-t border-gray-200 h-[3px]"></div>
                         </div>
 
                         {/* Foto Luminária */}
@@ -1448,8 +1463,8 @@ function Cadastro() {
                                 </p>
                             </div>
                         </div>
-
                     </div>
+
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     {/* Seção de Árvore */}
@@ -1496,10 +1511,12 @@ function Cadastro() {
                             )}
                         </div>
 
+
                         {/* Formulário de nova árvore */}
                         <div className="border-t pt-4">
                             <div className="flex justify-center mb-3">
                                 <BotaoCamera
+                                    id="arvore-camera"
                                     onFotoCapturada={(file) => {
                                         setFotoArvore(file);
                                         setEspecieArvore('');
@@ -1520,6 +1537,8 @@ function Cadastro() {
 
                                     <ComboBox
                                         label="Espécie *"
+                                        name="especieArvore"
+                                        id="especieArvore-field"
                                         value={especieArvore}
                                         options={[
                                             { value: "Sibipuruna", label: "Sibipuruna" },
@@ -1536,6 +1555,8 @@ function Cadastro() {
 
                                     {especieArvore === "Outra" && (
                                         <input
+                                            id="especieCustom"
+                                            name="especieCustom"
                                             type="text"
                                             value={especieCustom}
                                             onChange={(e) => setEspecieCustom(e.target.value)}
@@ -1556,20 +1577,12 @@ function Cadastro() {
                                                 return;
                                             }
 
-                                            // DEBUG: Verifique os dados antes de enviar
-                                            console.log('Dados da árvore:', {
-                                                file: fotoArvore,
-                                                especie,
-                                                coords: userCoords
-                                            });
-
                                             handleAdicionarFoto(TIPOS_FOTO.ARVORE, {
                                                 file: fotoArvore,
                                                 especie,
                                                 coords: userCoords,
                                             });
 
-                                            // Reset do formulário
                                             setFotoArvore(null);
                                             setEspecieArvore('');
                                             setEspecieCustom('');
@@ -1583,7 +1596,6 @@ function Cadastro() {
                         </div>
                     </div>
 
-
                     <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                     <div className="mt-4 text-center border rounded-lg bg-black p-2 text-sm text-blue-50">
@@ -1595,21 +1607,29 @@ function Cadastro() {
                     {/* Seção de Características Técnicas */}
                     <div className="mb-6">
                         <h2 className="text-xl font-bold mb-4 border rounded-md p-4 shadow-lg bg-slate-400 text-center">Dados da Postiação</h2>
+
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Poste com Transformador?"
+                            label="Poste com transformador?"
+                            name="transformador"
+                            id="transformador-field"
+                            value={state.transformador}
+                            autoComplete="off"
                             options={[
                                 { value: "Sim", label: "Sim" },
                                 { value: "Não", label: "Não" },
                             ]}
                             onChange={(value) => handleFieldChange('transformador', value)}
                         />
-
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Poste com medição?"
+                            label="Poste com Medição?"
+                            name="medicao"
+                            id="medicao-field"
+                            value={state.medicao}
+                            autoComplete="off"
                             options={[
                                 { value: "Sim", label: "Sim" },
                                 { value: "Não", label: "Não" },
@@ -1620,7 +1640,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Poste com telecom?"
+                            label="Poste com Telecom?"
+                            name="telecom"
+                            id="telecom-field"
+                            value={state.telecom}
+                            autoComplete="off"
                             options={[
                                 { value: "Sim", label: "Sim" },
                                 { value: "Não", label: "Não" },
@@ -1631,7 +1655,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Poste com concentrador?"
+                            label="Poste com Concentrador?"
+                            name="concentrador"
+                            id="concentrador-field"
+                            value={state.concentrador}
+                            autoComplete="off"
                             options={[
                                 { value: "Sim", label: "Sim" },
                                 { value: "Não", label: "Não" },
@@ -1643,6 +1671,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Poste de:"
+                            name="Poste de"
+                            id="poste-field"
+                            value={state.poste}
+                            autoComplete="off"
                             options={[
                                 { value: "Circular concreto", label: "Circular concreto" },
                                 { value: "Madeira", label: "Madeira" },
@@ -1659,6 +1691,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Altura do poste?"
+                            name="alturaposte"
+                            id="alturaposte-field"
+                            value={state.alturaposte}
+                            autoComplete="off"
                             options={[
                                 { value: "5", label: "5" },
                                 { value: "6", label: "6" },
@@ -1681,7 +1717,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Estrutura da postiação ?"
+                            label="Estrutura?"
+                            name="estruturaposte"
+                            id="estruturaposte-field"
+                            value={state.estruturaposte}
+                            autoComplete="off"
                             options={[
                                 { value: "Unilateral", label: "Unilateral" },
                                 { value: "Bilateral", label: "Bilateral" },
@@ -1695,13 +1735,17 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Selecione o tipo do braço ?"
+                            label="Selecione o tipo do braço?"
+                            name="tipoBraco"
+                            id="tipoBraco-field"
+                            value={state.tipoBraco}
+                            autoComplete="off"
                             options={[
                                 { value: "Braço Curto", label: "Braço Curto" },
                                 { value: "Braço Médio", label: "Braço Médio" },
                                 { value: "Braço Longo", label: "Braço Longo" },
-                                { value: "Level 1", label: "Level 1" },
-                                { value: "Level 2", label: "Level 2" },
+                                { value: "Leve 1", label: "Leve 1" },
+                                { value: "Leve 2", label: "Leve 2" },
                                 { value: "Suporte com 1", label: "Suporte com 1" },
                                 { value: "Suporte com 2", label: "Suporte com 2" },
                                 { value: "Suporte com 3", label: "Suporte com 3" },
@@ -1713,7 +1757,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tamanho do Braço ?"
+                            label="Tamanho do Braço?"
+                            name="tamanhoBraco"
+                            id="tamanhoBraco-field"
+                            value={state.tamanhoBraco}
+                            autoComplete="off"
                             options={[
                                 { value: "0.50", label: "0.50" },
                                 { value: "1.20", label: "1.20" },
@@ -1727,7 +1775,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Quantidade de Pontos ?"
+                            label="Quantidade de Pontos?"
+                            name="quantidadePontos"
+                            id="quantidadePontos-field"
+                            value={state.quantidadePontos}
+                            autoComplete="off"
                             options={[
                                 { value: "1", label: "1" },
                                 { value: "2", label: "2" },
@@ -1740,20 +1792,29 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tipo da Lâmpada ?"
+                            label="Tipo da Lâmpada?"
+                            name="tipoLampada"
+                            id="tipoLampada-field"
+                            value={state.tipoLampada}
+                            autoComplete="off"
                             options={[
                                 { value: "Vapor de Sodio VS", label: "Vapor de Sodio VS" },
                                 { value: "Vapor de Mercúrio VM", label: "Vapor de Mercúrio VM" },
                                 { value: "Mista", label: "Mista" },
-                                { value: "Led", label: "Led" },
+                                { value: "Led", label: "LED" },
                                 { value: "Desconhecida", label: "Desconhecida" },
                             ]}
-                            onChange={(value) => handleFieldChange('tipoLampada', value)} />
+                            onChange={(value) => handleFieldChange('tipoLampada', value)}
+                        />
 
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Potência da lâmpada ?"
+                            label="Potência da lâmpada?"
+                            name="potenciaLampada"
+                            id="potenciaLampada-field"
+                            value={state.potenciaLampada}
+                            autoComplete="off"
                             options={[
                                 { value: "70", label: "70" },
                                 { value: "80", label: "80" },
@@ -1770,7 +1831,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tipo do Reator ?"
+                            label="Tipo do Reator?"
+                            name="tipoReator"
+                            id="tipoReator-field"
+                            value={state.tipoReator}
+                            autoComplete="off"
                             options={[
                                 { value: "Reator Externo", label: "Reator Externo" },
                                 { value: "Reator Integrado", label: "Reator Integrado" },
@@ -1782,10 +1847,15 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tipo de Comando ?"
+                            label="Tipo de Comando?"
+                            name="tipoComando"
+                            id="tipoComando-field"
+                            value={state.tipoComando}
+                            autoComplete="off"
                             options={[
                                 { value: "Individual", label: "Individual" },
                                 { value: "Coletivo", label: "Coletivo" },
+                                { value: "telegestao", label: "Telegestão" },
                             ]}
                             onChange={(value) => handleFieldChange('tipoComando', value)}
                         />
@@ -1793,7 +1863,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tipo de Rede ?"
+                            label="Tipo de Rede?"
+                            name="tipoRede"
+                            id="tipoRede-field"
+                            value={state.tipoRede}
+                            autoComplete="off"
                             options={[
                                 { value: "Aérea BT", label: "Aérea BT" },
                                 { value: "Convencional", label: "Convencional" },
@@ -1805,7 +1879,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Tipo de Cabo ?"
+                            label="Tipo de Cabo?"
+                            name="tipoCabo"
+                            id="tipoCabo-field"
+                            value={state.tipoCabo}
+                            autoComplete="off"
                             options={[
                                 { value: "Alumínio Nú", label: "Alumínio Nú" },
                                 { value: "Isolado XLPE", label: "Isolado XLPE" },
@@ -1818,7 +1896,11 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Número de fases ?"
+                            label="Número de fases?"
+                            name="numeroFases"
+                            id="numeroFases-field"
+                            value={state.numeroFases}
+                            autoComplete="off"
                             options={[
                                 { value: "Monofásico", label: "Monofásico" },
                                 { value: "Bifásico", label: "Bifásico" },
@@ -1837,6 +1919,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Tipo de Via ?"
+                            name="tipoVia"
+                            id="tipoVia-field"
+                            value={state.tipoVia}
+                            autoComplete="off"
                             options={[
                                 { value: "Via Rápida", label: "Via Rápida" },
                                 { value: "Via Local", label: "Via Local" },
@@ -1851,6 +1937,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Hierarquia de Via ?"
+                            name="hierarquiaVia"
+                            id="hierarquiaVia-field"
+                            value={state.hierarquiaVia}
+                            autoComplete="off"
                             options={[
                                 { value: "Acesso", label: "Acesso" },
                                 { value: "Alameda", label: "Alameda" },
@@ -1869,6 +1959,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Tipo de pavimento ?"
+                            name="tipoPavimento"
+                            id="tipoPavimento-field"
+                            value={state.tipoPavimento}
+                            autoComplete="off"
                             options={[
                                 { value: "Asfalto", label: "Asfalto" },
                                 { value: "Paralelepipedo", label: "Paralelepipedo" },
@@ -1882,6 +1976,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Quantidade de faixas ?"
+                            name="quantidadeFaixas"
+                            id="quantidadeFaixas-field"
+                            value={state.quantidadeFaixas}
+                            autoComplete="off"
                             options={[
                                 { value: "1", label: "1" },
                                 { value: "2", label: "2" },
@@ -1897,6 +1995,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Tipo de Passeio ?"
+                            name="tipoPasseio"
+                            id="tipoPasseio-field"
+                            value={state.tipoPasseio}
+                            autoComplete="off"
                             options={[
                                 { value: "Concreto", label: "Concreto" },
                                 { value: "Pedra", label: "Pedra" },
@@ -1911,6 +2013,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Canteiro central existente ?"
+                            name="canteiroCentral"
+                            id="canteiroCentral-field"
+                            value={state.canteiroCentral}
+                            autoComplete="off"
                             options={[
                                 { value: "Sim", label: "Sim" },
                                 { value: "Não", label: "Não" },
@@ -1921,12 +2027,13 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <div className="col-span-1 md:col-span-2">
-                            <label className="block text-gray-700 font-extrabold mb-2">
+                            <label htmlFor="larguraCanteiro" className="block text-gray-700 font-extrabold mb-2">
                                 Largura do canteiro central
                             </label>
 
-                            {/* Input principal */}
                             <input
+                                id="larguraCanteiro"
+                                name="larguraCanteiro"
                                 type="number"
                                 step="0.1"
                                 value={state.larguraCanteiro || ''}
@@ -1967,6 +2074,8 @@ function Cadastro() {
                             <input
                                 placeholder="Em Metros (calculado automaticamente)"
                                 type="text"
+                                name="distanciaEntrePostes"
+                                id="distanciaEntrePostes-field"                                
                                 value={state.distanciaEntrePostes || ''}
                                 readOnly
                                 className={`w-full px-3 py-2 border mt-2 rounded-md focus:ring-blue-500 focus:border-blue-500 ${state.distanciaEntrePostes
@@ -1988,6 +2097,10 @@ function Cadastro() {
 
                         <ComboBox
                             label="Finalidade da Instalação ?"
+                            name="finalidadeInstalacao"
+                            id="finalidadeInstalacao-field"
+                            value={state.finalidadeInstalacao}
+                            autoComplete="off"
                             options={[
                                 { value: "Viária", label: "Viária" },
                                 { value: "Cemitério", label: "Cemitério" },

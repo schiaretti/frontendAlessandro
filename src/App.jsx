@@ -1,3 +1,4 @@
+import React from 'react'
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Cadastro from './pages/Cadastro';
@@ -8,7 +9,13 @@ import Cidades from './pages/Cidades';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/Dashboard/DashboardHome';
 
+
+
 function App() {
+   // Adicione isto para verificação
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Versão do React:', React.version);
+  }
   return (
     <BrowserRouter>
       <ErrorBoundary>

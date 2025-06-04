@@ -4,6 +4,8 @@ import { FiSun, FiUsers, FiMapPin, FiLogOut, FiMenu, FiX, FiMap, FiFileText  } f
 import useAuth from '../../hooks/useAuth';
 import Mapa from '../../components/Mapa';
 import axios from 'axios';
+import Relatorio from '../Relatorio';
+
 
 const Dashboard = () => {
   const { user, logout } = useAuth();

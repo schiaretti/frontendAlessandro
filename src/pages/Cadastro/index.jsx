@@ -1611,7 +1611,7 @@ function Cadastro() {
                         <hr style={{ margin: '16px 0', border: '0', borderTop: '3px solid #ccc' }} />
 
                         <ComboBox
-                            label="Poste com transformador?"
+                            label="Poste com transformador?" 
                             name="transformador"
                             id="transformador-field"
                             value={state.transformador}

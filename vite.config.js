@@ -32,8 +32,19 @@ export default defineConfig(({ mode }) => {
     ],
     // Configuração importante para o Vercel
     define: {
-    'process.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
-    'import.meta.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
+      'process.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
+      'import.meta.env.VITE_MAPBOX_TOKEN': JSON.stringify(process.env.VITE_MAPBOX_TOKEN),
     },
+    // Configuração de proxy para desenvolvimento
+    server: {
+      proxy: {
+        '/api': {
+          target: 'https://backendalesandro-production.up.railway.app',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path
+        }
+      }
+    }
   };
 });

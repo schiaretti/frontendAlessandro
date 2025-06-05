@@ -66,12 +66,12 @@ const Relatorio = () => {
       };
 
       console.log('Chamando API com parâmetros:', params);
-      
+
       // Usando URL completo do backend
-    const response = await axios.get('/api/relatorios/postes', { params });
+      const response = await axios.get('/api/relatorios/postes', { params });
 
       console.log('Resposta da API:', response.data);
-      
+
       setReportData(prev => ({
         data: response.data?.data || prev.data,
         meta: {
@@ -124,51 +124,51 @@ const Relatorio = () => {
 
   const prepareStatsForExcel = () => {
     const stats = [];
-    
+
     // Componentes
-    stats.push({ 
-      Categoria: 'Componentes', 
-      Item: 'Transformadores', 
-      Quantidade: reportData.meta?.componentes?.transformador || 0 
+    stats.push({
+      Categoria: 'Componentes',
+      Item: 'Transformadores',
+      Quantidade: reportData.meta?.componentes?.transformador || 0
     });
-    
-    stats.push({ 
-      Categoria: 'Componentes', 
-      Item: 'Concentradores', 
-      Quantidade: reportData.meta?.componentes?.concentrador || 0 
+
+    stats.push({
+      Categoria: 'Componentes',
+      Item: 'Concentradores',
+      Quantidade: reportData.meta?.componentes?.concentrador || 0
     });
-    
-    stats.push({ 
-      Categoria: 'Componentes', 
-      Item: 'Telecom', 
-      Quantidade: reportData.meta?.componentes?.telecom || 0 
+
+    stats.push({
+      Categoria: 'Componentes',
+      Item: 'Telecom',
+      Quantidade: reportData.meta?.componentes?.telecom || 0
     });
-    
-    stats.push({ 
-      Categoria: 'Componentes', 
-      Item: 'Medição', 
-      Quantidade: reportData.meta?.componentes?.medicao || 0 
+
+    stats.push({
+      Categoria: 'Componentes',
+      Item: 'Medição',
+      Quantidade: reportData.meta?.componentes?.medicao || 0
     });
-    
+
     // Iluminação
-    stats.push({ 
-      Categoria: 'Iluminação', 
-      Item: 'Lâmpadas 70W', 
-      Quantidade: reportData.meta?.iluminacao?.lampadas70w || 0 
+    stats.push({
+      Categoria: 'Iluminação',
+      Item: 'Lâmpadas 70W',
+      Quantidade: reportData.meta?.iluminacao?.lampadas70w || 0
     });
-    
-    stats.push({ 
-      Categoria: 'Iluminação', 
-      Item: 'Lâmpadas 100W', 
-      Quantidade: reportData.meta?.iluminacao?.lampadas100w || 0 
+
+    stats.push({
+      Categoria: 'Iluminação',
+      Item: 'Lâmpadas 100W',
+      Quantidade: reportData.meta?.iluminacao?.lampadas100w || 0
     });
-    
-    stats.push({ 
-      Categoria: 'Iluminação', 
-      Item: 'Lâmpadas 150W', 
-      Quantidade: reportData.meta?.iluminacao?.lampadas150w || 0 
+
+    stats.push({
+      Categoria: 'Iluminação',
+      Item: 'Lâmpadas 150W',
+      Quantidade: reportData.meta?.iluminacao?.lampadas150w || 0
     });
-    
+
     return stats;
   };
 
@@ -178,22 +178,22 @@ const Relatorio = () => {
       return;
     }
 
-    const dataToExport = reportType === 'estatisticas' 
-      ? prepareStatsForExcel() 
+    const dataToExport = reportType === 'estatisticas'
+      ? prepareStatsForExcel()
       : reportData.data?.map(item => {
-          // Remover as fotos do Excel
-          const { fotos, ...rest } = item;
-          return rest;
-        }) || [];
+        // Remover as fotos do Excel
+        const { fotos, ...rest } = item;
+        return rest;
+      }) || [];
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Relatório de Postes");
-    
+
     XLSX.writeFile(wb, "relatorio_postes.xlsx");
   };
 
-  const exportToPDF = async () => {
+  /*const exportToPDF = async () => {
     if (!reportData?.data && reportType !== 'estatisticas') {
       alert('Nenhum dado disponível para exportar');
       return;
@@ -282,6 +282,263 @@ const Relatorio = () => {
     }
 
     doc.save('relatorio_postes.pdf');
+  };*/
+
+ const exportToPDF = async () => {
+    try {
+      // Verificação de dados disponíveis
+      if (!reportData?.data && reportType !== 'estatisticas') {
+        throw new Error('Nenhum dado disponível para exportar');
+      }
+
+      // Configuração inicial do documento
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Função para carregar imagens
+      const loadImage = (url) => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`Falha ao carregar imagem: ${url}`));
+          img.src = url;
+        });
+      };
+
+      // Função para calcular dimensões mantendo proporção
+      const calculateDimensions = (img, maxWidth, maxHeight) => {
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          const ratio = maxWidth / width;
+          width = maxWidth;
+          height = height * ratio;
+        }
+        
+        if (height > maxHeight) {
+          const ratio = maxHeight / height;
+          height = maxHeight;
+          width = width * ratio;
+        }
+        
+        return { width, height };
+      };
+
+      // Estilos do documento
+      const styles = {
+        title: { fontSize: 18, color: '#2c3e50', align: 'center' },
+        subtitle: { fontSize: 14, color: '#34495e' },
+        text: { fontSize: 10, color: '#7f8c8d' },
+        tableHeader: { fillColor: '#3498db', textColor: '#ffffff', fontSize: 10 },
+        photoLabel: { fontSize: 9, color: '#95a5a6', fontStyle: 'italic' }
+      };
+
+      // Adicionar cabeçalho profissional
+      const addHeader = () => {
+        doc.setFontSize(styles.title.fontSize);
+        doc.setTextColor(styles.title.color);
+        doc.text('RELATÓRIO DE POSTES', 105, 20, { align: styles.title.align });
+
+        // Data e hora da geração
+        doc.setFontSize(styles.text.fontSize);
+        doc.setTextColor(styles.text.color);
+        const date = new Date().toLocaleString('pt-BR');
+        doc.text(`Gerado em: ${date}`, 105, 28, { align: 'center' });
+
+        // Linha divisória
+        doc.setDrawColor(200, 200, 200);
+        doc.line(20, 32, 190, 32);
+      };
+
+      addHeader();
+
+      if (reportType === 'estatisticas') {
+        // Seção de estatísticas profissionais
+        let y = 40;
+
+        doc.setFontSize(styles.subtitle.fontSize);
+        doc.setTextColor(styles.subtitle.color);
+        doc.text('ESTATÍSTICAS GERAIS', 105, y, { align: 'center' });
+        y += 15;
+
+        // Componentes
+        doc.setFontSize(12);
+        doc.setTextColor('#2c3e50');
+        doc.text('COMPONENTES INSTALADOS:', 20, y);
+        y += 8;
+
+        const components = [
+          { label: 'Transformadores', value: reportData.meta?.componentes?.transformador || 0 },
+          { label: 'Concentradores', value: reportData.meta?.componentes?.concentrador || 0 },
+          { label: 'Equipamentos Telecom', value: reportData.meta?.componentes?.telecom || 0 },
+          { label: 'Medição', value: reportData.meta?.componentes?.medicao || 0 }
+        ];
+
+        components.forEach(comp => {
+          doc.text(`• ${comp.label}:`, 25, y);
+          doc.setTextColor('#3498db');
+          doc.text(`${comp.value} unidades`, 70, y);
+          doc.setTextColor('#2c3e50');
+          y += 7;
+        });
+
+        y += 10;
+
+        // Iluminação
+        doc.text('ILUMINAÇÃO PÚBLICA:', 20, y);
+        y += 8;
+
+        const lighting = [
+          { label: 'Lâmpadas 70W', value: reportData.meta?.iluminacao?.lampadas70w || 0 },
+          { label: 'Lâmpadas 100W', value: reportData.meta?.iluminacao?.lampadas100w || 0 },
+          { label: 'Lâmpadas 150W', value: reportData.meta?.iluminacao?.lampadas150w || 0 }
+        ];
+
+        lighting.forEach(light => {
+          doc.text(`• ${light.label}:`, 25, y);
+          doc.setTextColor('#e74c3c');
+          doc.text(`${light.value} unidades`, 70, y);
+          doc.setTextColor('#2c3e50');
+          y += 7;
+        });
+
+      } else {
+        // Seção de dados detalhados
+        const tableData = reportData.data?.map(item => [
+          item.id || 'N/A',
+          item.numeroIdentificacao || 'N/A',
+          item.endereco || 'N/A',
+          item.cidade || 'N/A'
+        ]) || [];
+
+        doc.autoTable({
+          head: [['ID', 'Número', 'Endereço', 'Cidade']],
+          body: tableData,
+          startY: 40,
+          theme: 'grid',
+          headStyles: { fillColor: styles.tableHeader.fillColor, textColor: styles.tableHeader.textColor },
+          alternateRowStyles: { fillColor: '#f8f9fa' },
+          margin: { top: 40 },
+          styles: { fontSize: 9, cellPadding: 3 }
+        });
+
+        // Adicionar fotos se solicitado
+        if (includePhotos) {
+          let y = doc.lastAutoTable.finalY + 20;
+          
+          doc.setFontSize(styles.subtitle.fontSize);
+          doc.setTextColor(styles.subtitle.color);
+          doc.text('REGISTRO FOTOGRÁFICO', 105, y, { align: 'center' });
+          y += 10;
+
+          // Processar cada poste com suas fotos
+          for (const poste of reportData.data) {
+            if (poste.fotos && poste.fotos.length > 0) {
+              // Verificar se precisa adicionar nova página
+              if (y > 180) {
+                doc.addPage();
+                addHeader();
+                y = 40;
+              }
+              
+              doc.setFontSize(11);
+              doc.setTextColor('#2c3e50');
+              doc.text(`Poste: ${poste.numeroIdentificacao || 'N/A'}`, 20, y);
+              y += 7;
+              
+              for (const [index, foto] of poste.fotos.entries()) {
+                try {
+                  // Adicionar label da foto
+                  doc.setFontSize(styles.photoLabel.fontSize);
+                  doc.setTextColor(styles.photoLabel.color);
+                  doc.text(`Foto ${index + 1} (${foto.tipo || 'Sem tipo'}):`, 20, y);
+                  y += 5;
+                  
+                  // Carregar e adicionar imagem
+                  const img = await loadImage(foto.url);
+                  const maxWidth = 160;
+                  const maxHeight = 100;
+                  const { width, height } = calculateDimensions(img, maxWidth, maxHeight);
+                  
+                  // Verificar espaço na página
+                  if (y + height > 270) {
+                    doc.addPage();
+                    addHeader();
+                    y = 40;
+                  }
+                  
+                  // Adicionar imagem ao PDF
+                  doc.addImage(img, 'JPEG', 20, y, width, height);
+                  y += height + 10;
+                  
+                } catch (error) {
+                  console.error('Erro ao adicionar foto:', error);
+                  doc.setFontSize(9);
+                  doc.setTextColor('#e74c3c');
+                  doc.text(`[Erro: Foto ${index + 1} não carregada]`, 20, y);
+                  y += 7;
+                  doc.setTextColor(0, 0, 0);
+                }
+              }
+              y += 10;
+            }
+          }
+        }
+      }
+
+      // Adicionar rodapé profissional
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor('#7f8c8d');
+        doc.text(`Página ${i} de ${pageCount}`, 105, 287, { align: 'center' });
+        doc.text(`© ${new Date().getFullYear()} - SeuApp - Todos os direitos reservados`, 105, 292, { align: 'center' });
+      }
+
+      // Salvar o documento
+      doc.save(`Relatorio_Postes_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert(`Erro ao gerar PDF: ${error.message}`);
+    }
+  };
+
+  // Funções auxiliares
+  const loadImage = (url) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
+      img.src = url;
+    });
+  };
+
+  const calculateDimensions = (img, maxWidth, maxHeight) => {
+    let width = img.width;
+    let height = img.height;
+
+    // Redimensionar mantendo proporção
+    if (width > maxWidth) {
+      const ratio = maxWidth / width;
+      width = maxWidth;
+      height = height * ratio;
+    }
+
+    if (height > maxHeight) {
+      const ratio = maxHeight / height;
+      height = maxHeight;
+      width = width * ratio;
+    }
+
+    return { width, height };
   };
 
   // Opções para selects
@@ -298,11 +555,11 @@ const Relatorio = () => {
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Relatório de Postes</h1>
           <p className="text-gray-500">Visualize e exporte dados sobre postes e seus componentes</p>
         </div>
-        
+
         {/* Filtros e Controles */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Filtros e Opções</h2>
-          
+
           <form onSubmit={handleSearch}>
             {/* Pesquisa por Número de Identificação - Destacado */}
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -328,7 +585,7 @@ const Relatorio = () => {
               </div>
               <p className="mt-1 text-xs text-blue-600">Busque um poste específico pelo seu número de identificação</p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
               {/* Tipo de Relatório */}
               <div>
@@ -408,7 +665,7 @@ const Relatorio = () => {
                   placeholder="Digite a localização"
                 />
               </div>
-              
+
               {/* Tipo de Lâmpada */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Lâmpada</label>
@@ -424,7 +681,7 @@ const Relatorio = () => {
                   ))}
                 </select>
               </div>
-              
+
               {/* Tipo de Rede */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Rede</label>
@@ -440,7 +697,7 @@ const Relatorio = () => {
                   ))}
                 </select>
               </div>
-              
+
               {/* Estrutura do Poste */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Estrutura do Poste</label>
@@ -456,7 +713,7 @@ const Relatorio = () => {
                   ))}
                 </select>
               </div>
-              
+
               {/* Tipo de Braço */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Braço</label>
@@ -472,7 +729,7 @@ const Relatorio = () => {
                   ))}
                 </select>
               </div>
-              
+
               {/* Transformador */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Transformador</label>
@@ -487,7 +744,7 @@ const Relatorio = () => {
                   <option value="false">Não</option>
                 </select>
               </div>
-              
+
               {/* Concentrador */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Concentrador</label>
@@ -537,7 +794,7 @@ const Relatorio = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Botões de Ação */}
             <div className="flex flex-wrap gap-4">
               <button
@@ -576,7 +833,7 @@ const Relatorio = () => {
             </div>
           </form>
         </div>
-        
+
         {/* Conteúdo do Relatório */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           {loading ? (
@@ -591,7 +848,7 @@ const Relatorio = () => {
               {reportType === 'estatisticas' ? (
                 <div>
                   <h2 className="text-xl font-semibold text-gray-800 mb-6">Estatísticas Gerais</h2>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                     {/* Card de Total */}
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 shadow-sm border border-blue-200">
@@ -602,7 +859,7 @@ const Relatorio = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Componentes */}
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -612,7 +869,7 @@ const Relatorio = () => {
                         </svg>
                         Componentes
                       </h3>
-                      
+
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Transformadores</span>
@@ -621,9 +878,9 @@ const Relatorio = () => {
                             <span className="ml-1 text-gray-500 text-sm">un</span>
                           </div>
                         </div>
-                        
+
                         <div className="h-px bg-gray-200"></div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Concentradores</span>
                           <div className="flex items-center">
@@ -631,9 +888,9 @@ const Relatorio = () => {
                             <span className="ml-1 text-gray-500 text-sm">un</span>
                           </div>
                         </div>
-                        
+
                         <div className="h-px bg-gray-200"></div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Telecom</span>
                           <div className="flex items-center">
@@ -641,9 +898,9 @@ const Relatorio = () => {
                             <span className="ml-1 text-gray-500 text-sm">un</span>
                           </div>
                         </div>
-                        
+
                         <div className="h-px bg-gray-200"></div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Medição</span>
                           <div className="flex items-center">
@@ -653,7 +910,7 @@ const Relatorio = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Iluminação */}
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                       <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center">
@@ -662,7 +919,7 @@ const Relatorio = () => {
                         </svg>
                         Iluminação
                       </h3>
-                      
+
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Lâmpadas 70W</span>
@@ -671,9 +928,9 @@ const Relatorio = () => {
                             <span className="ml-1 text-gray-500 text-sm">un</span>
                           </div>
                         </div>
-                        
+
                         <div className="h-px bg-gray-200"></div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Lâmpadas 100W</span>
                           <div className="flex items-center">
@@ -681,9 +938,9 @@ const Relatorio = () => {
                             <span className="ml-1 text-gray-500 text-sm">un</span>
                           </div>
                         </div>
-                        
+
                         <div className="h-px bg-gray-200"></div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Lâmpadas 150W</span>
                           <div className="flex items-center">
@@ -698,7 +955,7 @@ const Relatorio = () => {
               ) : (
                 <div>
                   <h2 className="text-xl font-semibold text-gray-800 mb-6">Listagem de Postes</h2>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
@@ -725,10 +982,10 @@ const Relatorio = () => {
                                   {item.fotos?.length > 0 ? (
                                     <div className="flex space-x-2">
                                       {item.fotos.map((foto) => (
-                                        <a 
-                                          key={foto.id} 
-                                          href={foto.url} 
-                                          target="_blank" 
+                                        <a
+                                          key={foto.id}
+                                          href={foto.url}
+                                          target="_blank"
                                           rel="noopener noreferrer"
                                           className="text-blue-600 hover:text-blue-800 flex items-center"
                                         >
@@ -764,7 +1021,7 @@ const Relatorio = () => {
                         </span>{' '}
                         de <span className="font-medium">{pagination.total}</span> resultados
                       </div>
-                      
+
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
@@ -773,7 +1030,7 @@ const Relatorio = () => {
                         >
                           Anterior
                         </button>
-                        
+
                         <div className="flex items-center">
                           <span className="px-3 py-2 bg-blue-50 text-blue-700 font-medium rounded-md border border-blue-200">
                             {pagination.page}
@@ -781,7 +1038,7 @@ const Relatorio = () => {
                           <span className="mx-2 text-gray-500">de</span>
                           <span className="text-gray-700">{pagination.total_pages}</span>
                         </div>
-                        
+
                         <button
                           onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                           disabled={pagination.page >= pagination.total_pages}

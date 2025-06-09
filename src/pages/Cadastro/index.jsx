@@ -1617,8 +1617,8 @@ function Cadastro() {
                             value={state.transformador}
                             autoComplete="off"
                             options={[
-                                { value: "Sim", label: "Sim" },
-                                { value: "Não", label: "Não" },
+                                { value: "true", label: "Sim" },
+                                { value: "false", label: "Não" },
                             ]}
                             onChange={(value) => handleFieldChange('transformador', value)}
                         />
@@ -1631,8 +1631,8 @@ function Cadastro() {
                             value={state.medicao}
                             autoComplete="off"
                             options={[
-                                { value: "Sim", label: "Sim" },
-                                { value: "Não", label: "Não" },
+                                { value: "true", label: "Sim" },
+                                { value: "false", label: "Não" },
                             ]}
                             onChange={(value) => handleFieldChange('medicao', value)}
                         />
@@ -1646,8 +1646,8 @@ function Cadastro() {
                             value={state.telecom}
                             autoComplete="off"
                             options={[
-                                { value: "Sim", label: "Sim" },
-                                { value: "Não", label: "Não" },
+                                { value: "true", label: "Sim" },
+                                { value: "false", label: "Não" },
                             ]}
                             onChange={(value) => handleFieldChange('telecom', value)}
                         />
@@ -1661,8 +1661,8 @@ function Cadastro() {
                             value={state.concentrador}
                             autoComplete="off"
                             options={[
-                                { value: "Sim", label: "Sim" },
-                                { value: "Não", label: "Não" },
+                                { value: "true", label: "Sim" },
+                                { value: "false", label: "Não" },
                             ]}
                             onChange={(value) => handleFieldChange('concentrador', value)}
                         />

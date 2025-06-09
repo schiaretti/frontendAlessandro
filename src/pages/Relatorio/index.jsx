@@ -15,6 +15,7 @@ const Relatorio = () => {
         concentrador: 0,
         telecom: 0,
         medicao: 0
+        
       },
       iluminacao: {
         lampadas70w: 0,
@@ -193,111 +194,29 @@ const Relatorio = () => {
     XLSX.writeFile(wb, "relatorio_postes.xlsx");
   };
 
-  /*const exportToPDF = async () => {
-    if (!reportData?.data && reportType !== 'estatisticas') {
-      alert('Nenhum dado disponível para exportar');
-      return;
-    }
 
-    const doc = new jsPDF();
-    
-    // Título
-    doc.setFontSize(18);
-    doc.text('Relatório de Postes', 105, 15, { align: 'center' });
-    
-    if (reportType === 'estatisticas') {
-      // Estatísticas
-      doc.setFontSize(12);
-      let y = 30;
-      
-      doc.text('Componentes:', 14, y);
-      y += 7;
-      doc.text(`- Transformadores: ${reportData.meta?.componentes?.transformador || 0}`, 20, y);
-      y += 7;
-      doc.text(`- Concentradores: ${reportData.meta?.componentes?.concentrador || 0}`, 20, y);
-      y += 7;
-      doc.text(`- Telecom: ${reportData.meta?.componentes?.telecom || 0}`, 20, y);
-      y += 7;
-      doc.text(`- Medição: ${reportData.meta?.componentes?.medicao || 0}`, 20, y);
-      y += 10;
-      
-      doc.text('Iluminação:', 14, y);
-      y += 7;
-      doc.text(`- Lâmpadas 70W: ${reportData.meta?.iluminacao?.lampadas70w || 0}`, 20, y);
-      y += 7;
-      doc.text(`- Lâmpadas 100W: ${reportData.meta?.iluminacao?.lampadas100w || 0}`, 20, y);
-      y += 7;
-      doc.text(`- Lâmpadas 150W: ${reportData.meta?.iluminacao?.lampadas150w || 0}`, 20, y);
-    } else {
-      // Tabela de dados
-      const tableData = reportData.data?.map(item => [
-        item.id || '',
-        item.numeroIdentificacao || '',
-        item.endereco || '',
-        item.cidade || ''
-      ]) || [];
-
-      doc.autoTable({
-        head: [['ID', 'Número', 'Endereço', 'Cidade']],
-        body: tableData,
-        startY: 30
-      });
-
-      // Adicionar fotos se solicitado
-      if (includePhotos) {
-        let y = doc.lastAutoTable.finalY + 20;
-        
-        doc.text('Fotos dos Postes:', 14, y);
-        y += 10;
-        
-        // Processar cada poste com suas fotos
-        for (const poste of reportData.data) {
-          if (poste.fotos && poste.fotos.length > 0) {
-            // Verificar se precisa adicionar nova página
-            if (y > 250) {
-              doc.addPage();
-              y = 20;
-            }
-            
-            doc.text(`Poste ${poste.numeroIdentificacao}:`, 14, y);
-            y += 10;
-            
-            // Adicionar informações sobre as fotos
-            doc.setFontSize(10);
-            for (const foto of poste.fotos) {
-              doc.text(`- Tipo: ${foto.tipo}, URL: ${foto.url}`, 20, y);
-              y += 7;
-              
-              // Verificar se precisa adicionar nova página
-              if (y > 270) {
-                doc.addPage();
-                y = 20;
-              }
-            }
-            doc.setFontSize(12);
-            y += 5;
-          }
-        }
-      }
-    }
-
-    doc.save('relatorio_postes.pdf');
-  };*/
-
- const exportToPDF = async () => {
+  const exportToPDF = async () => {
     try {
-      // Verificação de dados disponíveis
+      // =============================================
+      // 1. VERIFICAÇÃO INICIAL DE DADOS
+      // =============================================
+
       if (!reportData?.data && reportType !== 'estatisticas') {
         throw new Error('Nenhum dado disponível para exportar');
       }
 
-      // Configuração inicial do documento
+      // =============================================
+      // 2. CONFIGURAÇÃO DO DOCUMENTO (AGORA EM RETRATO)
+      // =============================================
       const doc = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'portrait', // Alterado para landscape
         unit: 'mm',
         format: 'a4'
       });
 
+      // =============================================
+      // 3. FUNÇÕES AUXILIARES
+      // =============================================
       // Função para carregar imagens
       const loadImage = (url) => {
         return new Promise((resolve, reject) => {
@@ -309,68 +228,70 @@ const Relatorio = () => {
         });
       };
 
-      // Função para calcular dimensões mantendo proporção
+      // Função para calcular dimensões (ajustada para retrato)
       const calculateDimensions = (img, maxWidth, maxHeight) => {
         let width = img.width;
         let height = img.height;
-        
-        if (width > maxWidth) {
-          const ratio = maxWidth / width;
-          width = maxWidth;
-          height = height * ratio;
-        }
-        
-        if (height > maxHeight) {
-          const ratio = maxHeight / height;
-          height = maxHeight;
-          width = width * ratio;
-        }
-        
+
+        // Reduzir o tamanho máximo para fotos menores em retrato
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = width * ratio * 0.9; // Reduz um pouco mais para retrato
+        height = height * ratio * 0.9;
+
         return { width, height };
       };
 
-      // Estilos do documento
+      // =============================================
+      // 4. ESTILOS DO DOCUMENTO (AJUSTADOS PARA RETRATO)
+      // =============================================
       const styles = {
-        title: { fontSize: 18, color: '#2c3e50', align: 'center' },
-        subtitle: { fontSize: 14, color: '#34495e' },
-        text: { fontSize: 10, color: '#7f8c8d' },
-        tableHeader: { fillColor: '#3498db', textColor: '#ffffff', fontSize: 10 },
-        photoLabel: { fontSize: 9, color: '#95a5a6', fontStyle: 'italic' }
+        title: { fontSize: 12, color: '#2c3e50', align: 'center' }, // Reduzido para retrato
+        subtitle: { fontSize: 10, color: '#34495e' }, // Reduzido
+        text: { fontSize: 6, color: '#7f8c8d' }, // Reduzido
+        tableHeader: { fillColor: '#3498db', textColor: '#ffffff', fontSize: 6 }, // Reduzido
+        photoLabel: { fontSize: 6, color: '#95a5a6', fontStyle: 'italic' } // Reduzido
       };
 
-      // Adicionar cabeçalho profissional
+      // =============================================
+      // 5. CABEÇALHO (AJUSTADO PARA RETRATO)
+      // =============================================
       const addHeader = () => {
         doc.setFontSize(styles.title.fontSize);
         doc.setTextColor(styles.title.color);
-        doc.text('RELATÓRIO DE POSTES', 105, 20, { align: styles.title.align });
+        doc.text('RELATÓRIO DE POSTES', 105, 15, { align: 'center' }); // Centralizado em retrato (105mm)
+
 
         // Data e hora da geração
         doc.setFontSize(styles.text.fontSize);
         doc.setTextColor(styles.text.color);
         const date = new Date().toLocaleString('pt-BR');
-        doc.text(`Gerado em: ${date}`, 105, 28, { align: 'center' });
+        doc.text(`Gerado em: ${date}`, 105, 20, { align: 'center' });
 
-        // Linha divisória
+        // Linha divisória (largura ajustada para retrato)
         doc.setDrawColor(200, 200, 200);
-        doc.line(20, 32, 190, 32);
+        doc.line(20, 23, 190, 23); // Largura menor para retrato
       };
 
       addHeader();
 
+      // =============================================
+      // 6. SEÇÃO DE ESTATÍSTICAS (AJUSTADA PARA RETRATO)
+      // =============================================
+
       if (reportType === 'estatisticas') {
-        // Seção de estatísticas profissionais
-        let y = 40;
+       
+        let y = 30;
 
         doc.setFontSize(styles.subtitle.fontSize);
         doc.setTextColor(styles.subtitle.color);
         doc.text('ESTATÍSTICAS GERAIS', 105, y, { align: 'center' });
-        y += 15;
+        y += 10;
 
         // Componentes
-        doc.setFontSize(12);
+        doc.setFontSize(8);
         doc.setTextColor('#2c3e50');
         doc.text('COMPONENTES INSTALADOS:', 20, y);
-        y += 8;
+        y += 6;
 
         const components = [
           { label: 'Transformadores', value: reportData.meta?.componentes?.transformador || 0 },
@@ -379,19 +300,24 @@ const Relatorio = () => {
           { label: 'Medição', value: reportData.meta?.componentes?.medicao || 0 }
         ];
 
-        components.forEach(comp => {
-          doc.text(`• ${comp.label}:`, 25, y);
-          doc.setTextColor('#3498db');
-          doc.text(`${comp.value} unidades`, 70, y);
-          doc.setTextColor('#2c3e50');
-          y += 7;
-        });
+          // Layout em duas colunas para economizar espaço
+      components.forEach((comp, index) => {
+        const x = index % 2 === 0 ? 25 : 100; // Coluna esquerda ou direita
+        if (index % 2 === 0 && index !== 0) y += 6; // Nova linha a cada 2 itens
+        
+        doc.text(`• ${comp.label}:`, x, y);
+        doc.setTextColor('#3498db');
+        doc.text(`${comp.value}`, x + 40, y);
+        doc.setTextColor('#2c3e50');
+        
+        if (index % 2 !== 0) y += 6;
+      });
 
-        y += 10;
+      y += 10;
 
         // Iluminação
         doc.text('ILUMINAÇÃO PÚBLICA:', 20, y);
-        y += 8;
+        y += 6;
 
         const lighting = [
           { label: 'Lâmpadas 70W', value: reportData.meta?.iluminacao?.lampadas70w || 0 },
@@ -399,106 +325,152 @@ const Relatorio = () => {
           { label: 'Lâmpadas 150W', value: reportData.meta?.iluminacao?.lampadas150w || 0 }
         ];
 
-        lighting.forEach(light => {
-          doc.text(`• ${light.label}:`, 25, y);
-          doc.setTextColor('#e74c3c');
-          doc.text(`${light.value} unidades`, 70, y);
-          doc.setTextColor('#2c3e50');
-          y += 7;
-        });
+        // Layout em duas colunas
+      lighting.forEach((light, index) => {
+        const x = index % 2 === 0 ? 25 : 100;
+        if (index % 2 === 0 && index !== 0) y += 6;
+        
+        doc.text(`• ${light.label}:`, x, y);
+        doc.setTextColor('#e74c3c');
+        doc.text(`${light.value}`, x + 30, y);
+        doc.setTextColor('#2c3e50');
+        
+        if (index % 2 !== 0) y += 6;
+      });
 
       } else {
-        // Seção de dados detalhados
+        // Seção de dados detalhados (ajustada para landscape)
         const tableData = reportData.data?.map(item => [
-          item.id || 'N/A',
           item.numeroIdentificacao || 'N/A',
           item.endereco || 'N/A',
           item.cidade || 'N/A'
         ]) || [];
 
         doc.autoTable({
-          head: [['ID', 'Número', 'Endereço', 'Cidade']],
-          body: tableData,
-          startY: 40,
-          theme: 'grid',
-          headStyles: { fillColor: styles.tableHeader.fillColor, textColor: styles.tableHeader.textColor },
-          alternateRowStyles: { fillColor: '#f8f9fa' },
-          margin: { top: 40 },
-          styles: { fontSize: 9, cellPadding: 3 }
-        });
+        head: [['Número', 'Endereço', 'Cidade']],
+        body: tableData,
+        startY: 30,
+        theme: 'grid',
+        headStyles: styles.tableHeader,
+        alternateRowStyles: { fillColor: '#f8f9fa' },
+        margin: { top: 20 },
+        styles: { 
+          fontSize: 6, // Fonte menor
+          cellPadding: 2, // Padding reduzido
+          overflow: 'linebreak' // Quebra de linha para textos longos
+        },
+        columnStyles: {
+          0: { cellWidth: 25 }, // Coluna número mais estreita
+          1: { cellWidth: 'auto' }, // Endereço ocupa espaço disponível
+          2: { cellWidth: 30 } // Coluna cidade mais estreita
+        }
+      });
 
-        // Adicionar fotos se solicitado
+        // Adicionar fotos se solicitado (com layout lado a lado)
         if (includePhotos) {
-          let y = doc.lastAutoTable.finalY + 20;
-          
+          let y = doc.lastAutoTable.finalY + 15;
+
           doc.setFontSize(styles.subtitle.fontSize);
           doc.setTextColor(styles.subtitle.color);
           doc.text('REGISTRO FOTOGRÁFICO', 105, y, { align: 'center' });
-          y += 10;
+          y += 8;
 
           // Processar cada poste com suas fotos
           for (const poste of reportData.data) {
             if (poste.fotos && poste.fotos.length > 0) {
-              // Verificar se precisa adicionar nova página
-              if (y > 180) {
-                doc.addPage();
+              // Verificar espaço para o título do poste
+              if (y > 250) { // Deixar margem de segurança
+                doc.addPage('portrait');
                 addHeader();
-                y = 40;
+                y = 30;
               }
-              
-              doc.setFontSize(11);
+
+              doc.setFontSize(10);
               doc.setTextColor('#2c3e50');
               doc.text(`Poste: ${poste.numeroIdentificacao || 'N/A'}`, 20, y);
               y += 7;
-              
-              for (const [index, foto] of poste.fotos.entries()) {
+
+              // Processar fotos em pares (lado a lado)
+              for (let i = 0; i < poste.fotos.length; i += 2) {
+                const foto1 = poste.fotos[i];
+                const foto2 = poste.fotos[i + 1];
+
+                // Calcular altura necessária para este par de fotos
+                let requiredHeight = 0;
+
                 try {
-                  // Adicionar label da foto
+                  // Calcular dimensões da primeira foto
+                  const img1 = await loadImage(foto1.url);
+                  const maxWidth = 60;
+                  const maxHeight = 60;
+                  const dim1 = calculateDimensions(img1, maxWidth, maxHeight);
+
+                  // Calcular dimensões da segunda foto (se existir)
+                  let dim2 = { height: 0 };
+                  if (foto2) {
+                    const img2 = await loadImage(foto2.url);
+                    dim2 = calculateDimensions(img2, maxWidth, maxHeight);
+                  }
+
+                  // Altura necessária = altura da foto mais alta + espaço para labels e margem
+                  requiredHeight = Math.max(dim1.height, dim2.height) + 15;
+
+                  // Verificar se há espaço suficiente na página atual
+                  if (y + requiredHeight > 280) { // Margem de segurança de 10mm
+                    doc.addPage('portrait');
+                    addHeader();
+                    y = 30;
+
+                    // Re-adicionar o título do poste na nova página
+                    doc.setFontSize(10);
+                    doc.setTextColor('#2c3e50');
+                    doc.text(`Poste: ${poste.numeroIdentificacao || 'N/A'} (continuação)`, 20, y);
+                    y += 5;
+                  }
+
+                  // Adicionar label da foto 1
                   doc.setFontSize(styles.photoLabel.fontSize);
                   doc.setTextColor(styles.photoLabel.color);
-                  doc.text(`Foto ${index + 1} (${foto.tipo || 'Sem tipo'}):`, 20, y);
-                  y += 5;
-                  
-                  // Carregar e adicionar imagem
-                  const img = await loadImage(foto.url);
-                  const maxWidth = 160;
-                  const maxHeight = 100;
-                  const { width, height } = calculateDimensions(img, maxWidth, maxHeight);
-                  
-                  // Verificar espaço na página
-                  if (y + height > 270) {
-                    doc.addPage();
-                    addHeader();
-                    y = 40;
+                  doc.text(`Foto ${i + 1} (${foto1.tipo || 'Sem tipo'}):`, 20, y);
+
+                  // Adicionar primeira imagem
+                  doc.addImage(img1, 'JPEG', 20, y + 5, dim1.width, dim1.height);
+
+                  // Se existir segunda foto, adicionar ao lado
+                  if (foto2) {
+                    // Adicionar label da foto 2
+                    doc.text(`Foto ${i + 2} (${foto2.tipo || 'Sem tipo'}):`, 120, y);
+
+                    // Adicionar segunda imagem
+                    const img2 = await loadImage(foto2.url);
+                    doc.addImage(img2, 'JPEG', 120, y + 5, dim2.width, dim2.height);
                   }
-                  
-                  // Adicionar imagem ao PDF
-                  doc.addImage(img, 'JPEG', 20, y, width, height);
-                  y += height + 10;
-                  
+
+                  y += requiredHeight;
+
                 } catch (error) {
                   console.error('Erro ao adicionar foto:', error);
-                  doc.setFontSize(9);
+                  doc.setFontSize(8);
                   doc.setTextColor('#e74c3c');
-                  doc.text(`[Erro: Foto ${index + 1} não carregada]`, 20, y);
-                  y += 7;
+                  doc.text(`[Erro: Foto não carregada]`, 20, y);
+                  y += 8;
                   doc.setTextColor(0, 0, 0);
                 }
               }
-              y += 10;
+              y += 6; // Espaço entre postes
             }
           }
         }
       }
 
-      // Adicionar rodapé profissional
+      // Adicionar rodapé profissional (ajustado para landscape)
       const pageCount = doc.internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor('#7f8c8d');
-        doc.text(`Página ${i} de ${pageCount}`, 105, 287, { align: 'center' });
-        doc.text(`© ${new Date().getFullYear()} - SeuApp - Todos os direitos reservados`, 105, 292, { align: 'center' });
+        doc.text(`Página ${i} de ${pageCount}`, 105, 287, { align: 'center' }); // Posição Y ajustada
+        doc.text(`© ${new Date().getFullYear()} - SeuApp - Todos os direitos reservados`, 105, 290, { align: 'center' });
       }
 
       // Salvar o documento
@@ -510,42 +482,12 @@ const Relatorio = () => {
     }
   };
 
-  // Funções auxiliares
-  const loadImage = (url) => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
-      img.src = url;
-    });
-  };
-
-  const calculateDimensions = (img, maxWidth, maxHeight) => {
-    let width = img.width;
-    let height = img.height;
-
-    // Redimensionar mantendo proporção
-    if (width > maxWidth) {
-      const ratio = maxWidth / width;
-      width = maxWidth;
-      height = height * ratio;
-    }
-
-    if (height > maxHeight) {
-      const ratio = maxHeight / height;
-      height = maxHeight;
-      width = width * ratio;
-    }
-
-    return { width, height };
-  };
 
   // Opções para selects
-  const tiposLampada = ['LED', 'Vapor de Sódio', 'Vapor de Mercúrio', 'Metálica', 'Outro'];
-  const tiposRede = ['Aérea', 'Subterrânea', 'Mista'];
-  const tiposEstrutura = ['Concreto', 'Metálico', 'Madeira', 'Fibra', 'Outro'];
-  const tiposBraco = ['Curto', 'Médio', 'Longo', 'Duplo', 'Outro'];
+  const tiposLampada = ['Led', 'Vapor de Sodio VS', 'Vapor de Mercúrio VM', 'Mista', 'Outro'];
+  const tiposRede = ['Aérea BT', 'Subterrânea', 'Convencional', 'Outro'];
+  const tiposEstrutura = ['Unilateral', 'Bilateral', 'Canteiro central', 'Praça', 'Em frente ao oposto', 'Outro'];
+  const tiposBraco = ['Curto', 'Médio', 'Longo', 'Leve 1', 'Leve 2', 'Suporte c/ 1', 'Suporte c/ 2', 'Suporte c/ 3', 'Suporte c/ 4', 'Outro'];
 
   return (
     <div className="bg-gray-50 min-h-screen py-8">
@@ -960,10 +902,40 @@ const Relatorio = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endereço</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Poste</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitude</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitude</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cidade</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endereço</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CEP</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bairro</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">localizado em</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transformador</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Medição</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telecom</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Concentrador</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Poste de</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Altura</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estrutura</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Braço</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tamanho do Braço</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QTD de Pontos</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Lâmpada</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Potência</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Reator</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Comando</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Rede</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Cabo</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fase</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Via</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pavimento</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QTD Faixas</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passeio</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Canteiro Central</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Largura Canteiro</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distância entre Postes</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Finalidade Instalação</th>
                           {includePhotos && (
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fotos</th>
                           )}
@@ -973,29 +945,63 @@ const Relatorio = () => {
                         {reportData.data && reportData.data.length > 0 ? (
                           reportData.data.map((item) => (
                             <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.id}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.numeroIdentificacao}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.endereco}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.latitude}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.longitude}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.cidade}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.endereco}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.numero}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.cep}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.localizacao}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.emFrente}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.transformador ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.medicao ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.telecom ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.concentrador ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.poste}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.alturaposte} m</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.estruturaposte}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoBraco}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tamanhoBraco} m</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantidadePontos}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoLampada}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.potenciaLampada} W</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoReator}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoComando}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoRede}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoCabo}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.numeroFases}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoVia}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoPavimento}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantidadeFaixas}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoPasseio ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.canteiroCentral ? 'Sim' : 'Não'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.larguraCanteiro} m</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.distanciaEntrePostes} m</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.finalidadeInstalacao}</td>
                               {includePhotos && (
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {item.fotos?.length > 0 ? (
-                                    <div className="flex space-x-2">
-                                      {item.fotos.map((foto) => (
-                                        <a
-                                          key={foto.id}
-                                          href={foto.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-blue-600 hover:text-blue-800 flex items-center"
-                                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                          </svg>
-                                        </a>
+                                  {item.fotos && item.fotos.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                      {item.fotos.map((foto, idx) => (
+                                        <div key={idx} style={{ textAlign: 'center' }}>
+                                          <img
+                                            src={foto.url}
+                                            alt={`Foto ${foto.tipo || 'Poste'}`}
+                                            style={{ width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #ddd' }}
+                                            onError={(e) => {
+                                              e.target.onerror = null; // Evita loop infinito de erro
+                                              e.target.src = 'URL_DA_IMAGEM_PADRAO_DE_ERRO'; // Imagem de placeholder
+                                              console.error(`Erro ao carregar imagem na tabela: ${foto.url}`);
+                                            }}
+                                          />
+                                          <p style={{ fontSize: '0.7em', margin: '2px 0 0' }}>{foto.tipo || 'Foto'}</p>
+                                        </div>
                                       ))}
                                     </div>
-                                  ) : 'Nenhuma foto'}
+                                  ) : (
+                                    <span>Nenhuma Foto</span>
+                                  )}
                                 </td>
                               )}
                             </tr>

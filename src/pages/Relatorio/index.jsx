@@ -15,7 +15,7 @@ const Relatorio = () => {
         concentrador: 0,
         telecom: 0,
         medicao: 0
-        
+
       },
       iluminacao: {
         lampadas70w: 0,
@@ -209,7 +209,7 @@ const Relatorio = () => {
       // 2. CONFIGURAÇÃO DO DOCUMENTO (AGORA EM RETRATO)
       // =============================================
       const doc = new jsPDF({
-        orientation: 'portrait', // Alterado para landscape
+        orientation: 'portrait', // Alterado para portrait
         unit: 'mm',
         format: 'a4'
       });
@@ -249,7 +249,7 @@ const Relatorio = () => {
         subtitle: { fontSize: 10, color: '#34495e' }, // Reduzido
         text: { fontSize: 6, color: '#7f8c8d' }, // Reduzido
         tableHeader: { fillColor: '#3498db', textColor: '#ffffff', fontSize: 6 }, // Reduzido
-        photoLabel: { fontSize: 6, color: '#95a5a6', fontStyle: 'italic' } // Reduzido
+        photoLabel: { fontSize: 8, color: '#95a5a6', fontStyle: 'italic' } // Reduzido
       };
 
       // =============================================
@@ -278,8 +278,9 @@ const Relatorio = () => {
       // 6. SEÇÃO DE ESTATÍSTICAS (AJUSTADA PARA RETRATO)
       // =============================================
 
+     
       if (reportType === 'estatisticas') {
-       
+
         let y = 30;
 
         doc.setFontSize(styles.subtitle.fontSize);
@@ -300,20 +301,20 @@ const Relatorio = () => {
           { label: 'Medição', value: reportData.meta?.componentes?.medicao || 0 }
         ];
 
-          // Layout em duas colunas para economizar espaço
-      components.forEach((comp, index) => {
-        const x = index % 2 === 0 ? 25 : 100; // Coluna esquerda ou direita
-        if (index % 2 === 0 && index !== 0) y += 6; // Nova linha a cada 2 itens
-        
-        doc.text(`• ${comp.label}:`, x, y);
-        doc.setTextColor('#3498db');
-        doc.text(`${comp.value}`, x + 40, y);
-        doc.setTextColor('#2c3e50');
-        
-        if (index % 2 !== 0) y += 6;
-      });
+        // Layout em duas colunas para economizar espaço
+        components.forEach((comp, index) => {
+          const x = index % 2 === 0 ? 25 : 100; // Coluna esquerda ou direita
+          if (index % 2 === 0 && index !== 0) y += 6; // Nova linha a cada 2 itens
 
-      y += 10;
+          doc.text(`• ${comp.label}:`, x, y);
+          doc.setTextColor('#3498db');
+          doc.text(`${comp.value}`, x + 40, y);
+          doc.setTextColor('#2c3e50');
+
+          if (index % 2 !== 0) y += 6;
+        });
+
+        y += 10;
 
         // Iluminação
         doc.text('ILUMINAÇÃO PÚBLICA:', 20, y);
@@ -326,20 +327,20 @@ const Relatorio = () => {
         ];
 
         // Layout em duas colunas
-      lighting.forEach((light, index) => {
-        const x = index % 2 === 0 ? 25 : 100;
-        if (index % 2 === 0 && index !== 0) y += 6;
-        
-        doc.text(`• ${light.label}:`, x, y);
-        doc.setTextColor('#e74c3c');
-        doc.text(`${light.value}`, x + 30, y);
-        doc.setTextColor('#2c3e50');
-        
-        if (index % 2 !== 0) y += 6;
-      });
+        lighting.forEach((light, index) => {
+          const x = index % 2 === 0 ? 25 : 100;
+          if (index % 2 === 0 && index !== 0) y += 6;
+
+          doc.text(`• ${light.label}:`, x, y);
+          doc.setTextColor('#e74c3c');
+          doc.text(`${light.value}`, x + 30, y);
+          doc.setTextColor('#2c3e50');
+
+          if (index % 2 !== 0) y += 6;
+        });
 
       } else {
-        // Seção de dados detalhados (ajustada para landscape)
+        // Seção de dados detalhados (ajustada para portrait)
         const tableData = reportData.data?.map(item => [
           item.numeroIdentificacao || 'N/A',
           item.endereco || 'N/A',
@@ -347,24 +348,24 @@ const Relatorio = () => {
         ]) || [];
 
         doc.autoTable({
-        head: [['Número', 'Endereço', 'Cidade']],
-        body: tableData,
-        startY: 30,
-        theme: 'grid',
-        headStyles: styles.tableHeader,
-        alternateRowStyles: { fillColor: '#f8f9fa' },
-        margin: { top: 20 },
-        styles: { 
-          fontSize: 6, // Fonte menor
-          cellPadding: 2, // Padding reduzido
-          overflow: 'linebreak' // Quebra de linha para textos longos
-        },
-        columnStyles: {
-          0: { cellWidth: 25 }, // Coluna número mais estreita
-          1: { cellWidth: 'auto' }, // Endereço ocupa espaço disponível
-          2: { cellWidth: 30 } // Coluna cidade mais estreita
-        }
-      });
+          head: [['Número', 'Endereço', 'Cidade']],
+          body: tableData,
+          startY: 30,
+          theme: 'grid',
+          headStyles: styles.tableHeader,
+          alternateRowStyles: { fillColor: '#f8f9fa' },
+          margin: { top: 20 },
+          styles: {
+            fontSize: 6, // Fonte menor
+            cellPadding: 2, // Padding reduzido
+            overflow: 'linebreak' // Quebra de linha para textos longos
+          },
+          columnStyles: {
+            0: { cellWidth: 25 }, // Coluna número mais estreita
+            1: { cellWidth: 'auto' }, // Endereço ocupa espaço disponível
+            2: { cellWidth: 30 } // Coluna cidade mais estreita
+          }
+        });
 
         // Adicionar fotos se solicitado (com layout lado a lado)
         if (includePhotos) {
@@ -390,30 +391,55 @@ const Relatorio = () => {
               doc.text(`Poste: ${poste.numeroIdentificacao || 'N/A'}`, 20, y);
               y += 7;
 
-              // Processar fotos em pares (lado a lado)
-              for (let i = 0; i < poste.fotos.length; i += 2) {
+              // Processar fotos em grupos de 4 (lado a lado)
+              for (let i = 0; i < poste.fotos.length; i += 4) {
                 const foto1 = poste.fotos[i];
                 const foto2 = poste.fotos[i + 1];
+                const foto3 = poste.fotos[i + 2];
+                const foto4 = poste.fotos[i + 3];
 
-                // Calcular altura necessária para este par de fotos
+                // Calcular altura necessária para este grupo de fotos
                 let requiredHeight = 0;
 
                 try {
-                  // Calcular dimensões da primeira foto
-                  const img1 = await loadImage(foto1.url);
-                  const maxWidth = 60;
-                  const maxHeight = 60;
-                  const dim1 = calculateDimensions(img1, maxWidth, maxHeight);
+                  const maxWidth = 40; // Ajustado para 4 fotos
+                  const maxHeight = 40; // Ajustado para 4 fotos
 
-                  // Calcular dimensões da segunda foto (se existir)
-                  let dim2 = { height: 0 };
+                  let maxPhotoHeight = 0;
+
+                  // Processar foto 1
+                  let dim1 = { width: 0, height: 0 };
+                  if (foto1) {
+                    const img1 = await loadImage(foto1.url);
+                    dim1 = calculateDimensions(img1, maxWidth, maxHeight);
+                    maxPhotoHeight = Math.max(maxPhotoHeight, dim1.height);
+                  }
+
+                  // Processar foto 2
+                  let dim2 = { width: 0, height: 0 };
                   if (foto2) {
                     const img2 = await loadImage(foto2.url);
                     dim2 = calculateDimensions(img2, maxWidth, maxHeight);
+                    maxPhotoHeight = Math.max(maxPhotoHeight, dim2.height);
                   }
 
-                  // Altura necessária = altura da foto mais alta + espaço para labels e margem
-                  requiredHeight = Math.max(dim1.height, dim2.height) + 15;
+                  // Processar foto 3
+                  let dim3 = { width: 0, height: 0 };
+                  if (foto3) {
+                    const img3 = await loadImage(foto3.url);
+                    dim3 = calculateDimensions(img3, maxWidth, maxHeight);
+                    maxPhotoHeight = Math.max(maxPhotoHeight, dim3.height);
+                  }
+
+                  // Processar foto 4
+                  let dim4 = { width: 0, height: 0 };
+                  if (foto4) {
+                    const img4 = await loadImage(foto4.url);
+                    dim4 = calculateDimensions(img4, maxWidth, maxHeight);
+                    maxPhotoHeight = Math.max(maxPhotoHeight, dim4.height);
+                  }
+
+                  requiredHeight = maxPhotoHeight + 15; // Altura da foto mais alta + espaço para labels e margem
 
                   // Verificar se há espaço suficiente na página atual
                   if (y + requiredHeight > 280) { // Margem de segurança de 10mm
@@ -428,22 +454,40 @@ const Relatorio = () => {
                     y += 5;
                   }
 
-                  // Adicionar label da foto 1
-                  doc.setFontSize(styles.photoLabel.fontSize);
-                  doc.setTextColor(styles.photoLabel.color);
-                  doc.text(`Foto ${i + 1} (${foto1.tipo || 'Sem tipo'}):`, 20, y);
+                  // Adicionar fotos e labels
+                  const startX = 20; // Posição inicial X
+                  const photoSpacing = 45; // Espaçamento entre as fotos
 
-                  // Adicionar primeira imagem
-                  doc.addImage(img1, 'JPEG', 20, y + 5, dim1.width, dim1.height);
+                  if (foto1) {
+                    doc.setFontSize(styles.photoLabel.fontSize);
+                    doc.setTextColor(styles.photoLabel.color);
+                    doc.text(`Foto ${i + 1} (${foto1.tipo || 'Sem tipo'}):`, startX, y);
+                    const img1 = await loadImage(foto1.url);
+                    doc.addImage(img1, 'JPEG', startX, y + 5, dim1.width, dim1.height);
+                  }
 
-                  // Se existir segunda foto, adicionar ao lado
                   if (foto2) {
-                    // Adicionar label da foto 2
-                    doc.text(`Foto ${i + 2} (${foto2.tipo || 'Sem tipo'}):`, 120, y);
-
-                    // Adicionar segunda imagem
+                    doc.setFontSize(styles.photoLabel.fontSize);
+                    doc.setTextColor(styles.photoLabel.color);
+                    doc.text(`Foto ${i + 2} (${foto2.tipo || 'Sem tipo'}):`, startX + photoSpacing, y);
                     const img2 = await loadImage(foto2.url);
-                    doc.addImage(img2, 'JPEG', 120, y + 5, dim2.width, dim2.height);
+                    doc.addImage(img2, 'JPEG', startX + photoSpacing, y + 5, dim2.width, dim2.height);
+                  }
+
+                  if (foto3) {
+                    doc.setFontSize(styles.photoLabel.fontSize);
+                    doc.setTextColor(styles.photoLabel.color);
+                    doc.text(`Foto ${i + 3} (${foto3.tipo || 'Sem tipo'}):`, startX + (photoSpacing * 2), y);
+                    const img3 = await loadImage(foto3.url);
+                    doc.addImage(img3, 'JPEG', startX + (photoSpacing * 2), y + 5, dim3.width, dim3.height);
+                  }
+
+                  if (foto4) {
+                    doc.setFontSize(styles.photoLabel.fontSize);
+                    doc.setTextColor(styles.photoLabel.color);
+                    doc.text(`Foto ${i + 4} (${foto4.tipo || 'Sem tipo'}):`, startX + (photoSpacing * 3), y);
+                    const img4 = await loadImage(foto4.url);
+                    doc.addImage(img4, 'JPEG', startX + (photoSpacing * 3), y + 5, dim4.width, dim4.height);
                   }
 
                   y += requiredHeight;
@@ -481,6 +525,8 @@ const Relatorio = () => {
       alert(`Erro ao gerar PDF: ${error.message}`);
     }
   };
+
+
 
 
   // Opções para selects
@@ -929,6 +975,7 @@ const Relatorio = () => {
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Cabo</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fase</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Via</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hierarquia Via</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pavimento</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QTD Faixas</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passeio</th>
@@ -972,6 +1019,7 @@ const Relatorio = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoCabo}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.numeroFases}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoVia}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.hierarquiaVia}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoPavimento}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantidadeFaixas}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.tipoPasseio ? 'Sim' : 'Não'}</td>
@@ -982,27 +1030,69 @@ const Relatorio = () => {
                               {includePhotos && (
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   {item.fotos && item.fotos.length > 0 ? (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      flexWrap: 'wrap',
+                                      gap: '10px',  // Aumentei o espaçamento para melhor legibilidade
+                                      alignItems: 'flex-start'  // Alinha os itens no topo
+                                    }}>
                                       {item.fotos.map((foto, idx) => (
-                                        <div key={idx} style={{ textAlign: 'center' }}>
-                                          <img
-                                            src={foto.url}
-                                            alt={`Foto ${foto.tipo || 'Poste'}`}
-                                            style={{ width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #ddd' }}
-                                            onError={(e) => {
-                                              e.target.onerror = null; // Evita loop infinito de erro
-                                              e.target.src = 'URL_DA_IMAGEM_PADRAO_DE_ERRO'; // Imagem de placeholder
-                                              console.error(`Erro ao carregar imagem na tabela: ${foto.url}`);
-                                            }}
-                                          />
-                                          <p style={{ fontSize: '0.7em', margin: '2px 0 0' }}>{foto.tipo || 'Foto'}</p>
+                                        <div
+                                          key={idx}
+                                          style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',  // Centraliza imagem e texto
+                                            width: '90px',  // Largura fixa para uniformidade
+                                          }}
+                                        >
+                                          <div style={{
+                                            width: '80px',
+                                            height: '80px',
+                                            border: '1px solid #e2e8f0',  // Cor mais suave
+                                            borderRadius: '4px',  // Bordas arredondadas
+                                            overflow: 'hidden',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            backgroundColor: '#f8fafc'  // Fundo cinza claro para imagens com erro
+                                          }}>
+                                            <img
+                                              src={foto.url}
+                                              alt={`Foto ${foto.tipo || 'Poste'}`}
+                                              style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover',
+                                                objectPosition: 'center'
+                                              }}
+                                              onError={(e) => {
+                                                e.target.onerror = null;
+                                                e.target.src = 'https://via.placeholder.com/80x80?text=Erro';
+                                                console.error(`Erro ao carregar imagem: ${foto.url}`);
+                                              }}
+                                            />
+                                          </div>
+                                          <p style={{
+                                            fontSize: '0.7em',
+                                            marginTop: '4px',
+                                            color: '#64748b',  // Cor mais suave
+                                            textAlign: 'center',
+                                            maxWidth: '80px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            {foto.tipo || 'Foto'}
+                                          </p>
                                         </div>
                                       ))}
                                     </div>
                                   ) : (
-                                    <span>Nenhuma Foto</span>
+                                    <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhuma Foto</span>
                                   )}
                                 </td>
+
                               )}
                             </tr>
                           ))

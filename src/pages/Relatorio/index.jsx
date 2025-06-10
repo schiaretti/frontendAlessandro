@@ -69,7 +69,7 @@ const Relatorio = () => {
       console.log('Chamando API com parâmetros:', params);
 
       // Usando URL completo do backend
-      const response = await axios.get('/api/relatorios/postes', { params });
+      const response = await axios.get('https://backendalesandro-production.up.railway.app/api/relatorios/postes', { params });
 
       console.log('Resposta da API:', response.data);
 
